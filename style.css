@@ -1,0 +1,14 @@
+body {
+    margin: 0;
+    overflow: hidden; /* Hide scrollbars */
+    background-color: #222; /* Dark background for the page */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+}
+
+canvas {
+    border: 1px solid white; /* Optional: to see the canvas boundaries */
+    background-color: #000; /* Black background for the canvas */
+}
