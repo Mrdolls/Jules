@@ -77,7 +77,10 @@
         const INITIAL_CIRCLES = 5;
         const WAVE_DURATION = 20000; // 20 secondes en millisecondes
         const MAX_WAVES = 100;
-        const AI_DECISION_INTERVAL = 100; // L\'IA prend une décision toutes les 100 ms
+        const BASE_WAVE_DURATION = 20000; // 20 secondes en millisecondes
+        const BASE_AI_DECISION_INTERVAL = 5; // L'IA prend une décision toutes les 5 ms (valeur de base)
+        const TARGET_AI_ITERATIONS = BASE_WAVE_DURATION / BASE_AI_DECISION_INTERVAL; // Cible de 4000 itérations
+        const MIN_AI_DECISION_INTERVAL = 4; // Plancher pour l'intervalle de décision de l'IA en ms
 
         // Récompenses et pénalités
         const REWARD_COLLECT_CIRCLE = 10;
@@ -97,6 +100,10 @@
         let gameLoopId;
         let aiDecisionIntervalId;
         let waveTimerId;
+
+        let currentRealWaveDuration = BASE_WAVE_DURATION;
+        let currentAiDecisionInterval = BASE_AI_DECISION_INTERVAL;
+        let aiDecisionCounter = 0;
 
         let trainingData = [];
         let lastSquarePosition = { x: 0, y: 0 };
@@ -306,6 +313,7 @@
         }
 
         function makeAIDecision() {
+            aiDecisionCounter++;
             if (!isTraining || !square) return;
 
             if (!neuralNetwork || typeof neuralNetwork.run !== 'function') {
@@ -424,6 +432,13 @@
             epsilon = initialEpsilon;
             epsilonDisplay.textContent = epsilon.toFixed(2);
 
+            // Add this before startNextWave() in startTraining()
+            const sVStart = parseInt(speedControl.value);
+            currentRealWaveDuration = BASE_WAVE_DURATION / sVStart;
+            let desiredIntervalStart = currentRealWaveDuration / TARGET_AI_ITERATIONS;
+            currentAiDecisionInterval = Math.max(desiredIntervalStart, MIN_AI_DECISION_INTERVAL);
+            console.log(`[startTraining] speedValue: ${sVStart}, realWaveDuration: ${currentRealWaveDuration}, aiInterval: ${currentAiDecisionInterval}`); // For testing
+
             startNextWave();
 
             if (gameLoopId) cancelAnimationFrame(gameLoopId);
@@ -431,6 +446,10 @@
         }
 
         function stopTraining() {
+            // At the beginning of stopTraining()
+            if (isTraining) { // only log if training was actually running
+                console.log(`[stopTraining] Training stopped during wave ${wave}. AI decisions made in this partial wave: ${aiDecisionCounter}`);
+            }
             isTraining = false;
             startButton.textContent = "Lancer l'entraînement";
             startButton.classList.remove('bg-red-600', 'hover:bg-red-700');
@@ -445,6 +464,13 @@
         }
 
         function startNextWave() {
+            // Add this at the beginning of startNextWave()
+            const sVNext = parseInt(speedControl.value);
+            currentRealWaveDuration = BASE_WAVE_DURATION / sVNext;
+            let desiredIntervalNext = currentRealWaveDuration / TARGET_AI_ITERATIONS;
+            currentAiDecisionInterval = Math.max(desiredIntervalNext, MIN_AI_DECISION_INTERVAL);
+            console.log(`[startNextWave] speedValue: ${sVNext}, realWaveDuration: ${currentRealWaveDuration}, aiInterval: ${currentAiDecisionInterval}`); // For testing
+
             if (!isTraining) return;
 
             wave++;
@@ -467,13 +493,14 @@
             statusMessageSpan.classList.add('text-blue-600');
 
 
+            aiDecisionCounter = 0; // Reset for the new wave
             if(aiDecisionIntervalId) clearInterval(aiDecisionIntervalId);
-            aiDecisionIntervalId = setInterval(makeAIDecision, AI_DECISION_INTERVAL);
+            aiDecisionIntervalId = setInterval(makeAIDecision, currentAiDecisionInterval);
 
             if(waveTimerId) clearTimeout(waveTimerId);
             waveTimerId = setTimeout(() => {
                 endWave();
-            }, WAVE_DURATION);
+            }, currentRealWaveDuration);
         }
 
         async function endWave() {
@@ -509,6 +536,7 @@
                 console.log("Pas de données d'entraînement pour cette vague ou réseau non disponible.");
             }
 
+            console.log(`[endWave] Wave ${wave} ended. Total AI decisions: ${aiDecisionCounter}`);
             saveNeuralNetwork();
             trainingData = [];
 
