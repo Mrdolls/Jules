@@ -94,6 +94,9 @@
         // let neuralNetwork; // Removed for population-based approach
 
         const POPULATION_SIZE = 10;
+        const ELITISM_COUNT = 2; // Number of best individuals to carry over directly
+        const MUTATION_RATE = 0.05; // 5% chance for each weight/bias to mutate
+        const MUTATION_AMOUNT = 0.1;  // Max +/- amount for mutation
         let neuralNetworks = []; // Will store instances of Brain.js networks
         let individualScores = new Array(POPULATION_SIZE).fill(0); // Stores final scores for the current generation
         const individualColors = [
@@ -248,8 +251,70 @@
         }
 
         function processEndOfGeneration() {
-            console.log(`[processEndOfGeneration] Fin de la Génération ${currentGeneration}. Scores:`, individualScores);
-            // Later: Selection, Crossover, Mutation
+            // 1. Create a structure for sorting networks along with their scores and original index
+            let scoredNetworks = neuralNetworks.map((net, index) => ({
+                index: index,
+                score: individualScores[index], // individualScores should be up-to-date here
+                networkJSON: net.toJSON() // Get JSON once for efficiency
+            }));
+
+            // 2. Sort networks by score in descending order (best first)
+            scoredNetworks.sort((a, b) => b.score - a.score);
+
+            console.log(`[processEndOfGeneration] Fin de la Génération ${currentGeneration}. Scores triés (top 5):`, scoredNetworks.slice(0, 5).map(s => ({idx: s.index, score: s.score.toFixed(2)})));
+
+            let nextGenerationJSONs = [];
+
+            // 3. Elitism: Carry over the best ELITISM_COUNT individuals
+            // Assuming ELITISM_COUNT is a const and set to a reasonable value, otherwise add check:
+            // if (ELITISM_COUNT > POPULATION_SIZE) { ELITISM_COUNT = POPULATION_SIZE; }
+            for (let i = 0; i < ELITISM_COUNT && i < scoredNetworks.length; i++) {
+                console.log(`[processEndOfGeneration] Elite ${i+1}: Individu original ${scoredNetworks[i].index} (Score: ${scoredNetworks[i].score.toFixed(2)})`);
+                nextGenerationJSONs.push(scoredNetworks[i].networkJSON);
+            }
+
+            // Placeholder for Crossover and Mutation
+            let childrenNeeded = POPULATION_SIZE - nextGenerationJSONs.length;
+            if (scoredNetworks.length === 0 && childrenNeeded > 0) {
+                console.error("[processEndOfGeneration] CRITICAL: scoredNetworks is empty, cannot create children. Training may fail.");
+                // This state should ideally not be reached if POPULATION_SIZE > 0
+            } else if (scoredNetworks.length > 0) { // Ensure there's at least one network to copy from
+                for (let i = 0; i < childrenNeeded; i++) {
+                    // Simple placeholder: copy the best one (or cycle through top elites for variety)
+                    const parentJson = scoredNetworks[i % Math.min(ELITISM_COUNT, scoredNetworks.length)] ? scoredNetworks[i % Math.min(ELITISM_COUNT, scoredNetworks.length)].networkJSON : scoredNetworks[0].networkJSON;
+                    const childJson = JSON.parse(JSON.stringify(parentJson));
+                    nextGenerationJSONs.push(childJson);
+                }
+            } else {
+                 // If scoredNetworks is empty and children are needed, this is a problem.
+                 // For now, just log, the population will be smaller or empty.
+                 console.error("[processEndOfGeneration] Cannot create children as no scored networks are available.");
+            }
+
+            console.log(`[processEndOfGeneration] Application de la mutation aux ${POPULATION_SIZE - ELITISM_COUNT} enfants potentiels.`);
+            for (let i = ELITISM_COUNT; i < nextGenerationJSONs.length; i++) {
+                if (nextGenerationJSONs[i]) { // Ensure the JSON exists
+                    // console.log(`[processEndOfGeneration] Mutation de l'enfant ${i - ELITISM_COUNT + 1} (index ${i} dans nextGenerationJSONs).`);
+                    nextGenerationJSONs[i] = mutate(nextGenerationJSONs[i], MUTATION_RATE, MUTATION_AMOUNT);
+                } else {
+                    console.warn(`[processEndOfGeneration] Tentative de mutation sur un JSON non défini à l'index ${i} de nextGenerationJSONs.`);
+                }
+            }
+
+            // Create new Brain.js instances from the nextGenerationJSONs
+            const newNeuralNetworks = []; // Temporary array for the new generation
+            for (let i = 0; i < nextGenerationJSONs.length; i++) {
+                const net = new window.brain.NeuralNetwork().fromJSON(nextGenerationJSONs[i]);
+                net.colorDisplay = individualColors[i % individualColors.length];
+                newNeuralNetworks.push(net);
+            }
+            neuralNetworks = newNeuralNetworks; // Assign the new generation
+
+            if (neuralNetworks.length !== POPULATION_SIZE && childrenNeeded > 0 && scoredNetworks.length === 0) {
+                 console.warn(`[processEndOfGeneration] Population size is ${neuralNetworks.length} due to inability to create children from empty scoredNetworks.`);
+            } else if (neuralNetworks.length !== POPULATION_SIZE) {
+                 console.error(`[processEndOfGeneration] Population size mismatch! Expected ${POPULATION_SIZE}, got ${neuralNetworks.length}.`);
+            }
 
             savePopulation(); // Save all networks at the end of a full generation
 
@@ -669,6 +734,141 @@
             } catch (error) {
                 console.error("Erreur lors de la sauvegarde de la population de réseaux de neurones:", error);
             }
+        }
+
+        function crossover(networkJSON1, networkJSON2) {
+            if (!networkJSON1 || !networkJSON2) {
+                console.error("Crossover: Un ou les deux parents sont non définis.");
+                return networkJSON1 || networkJSON2 || null; // Return a parent if one is null, or null if both
+            }
+
+            // Deep copy parent1 to create the child structure.
+            // This also copies other network properties like 'sizes', 'activation', 'outputLayer', etc.
+            let childJSON = JSON.parse(JSON.stringify(networkJSON1));
+
+            // Iterate through layers (Brain.js JSON usually has an empty layer 0 for input)
+            // Weight/bias processing typically starts from layer 1.
+            for (let l = 1; l < childJSON.layers.length; l++) {
+                const layer1 = networkJSON1.layers[l];
+                const layer2 = networkJSON2.layers[l];
+                const childLayer = childJSON.layers[l];
+
+                if (!layer1 || !layer2) {
+                    // console.warn(`Crossover: Layer ${l} manquant chez un parent.`);
+                    continue;
+                }
+
+                // Crossover biases
+                if (childLayer.biases && layer1.biases && layer2.biases) {
+                    // Assuming biases is an object like: { '0': bias_val, '1': bias_val, ... }
+                    // Or an array: [bias_val, bias_val, ...]
+                    if (Array.isArray(childLayer.biases)) {
+                        for (let i = 0; i < childLayer.biases.length; i++) {
+                            if (layer1.biases[i] !== undefined && layer2.biases[i] !== undefined) {
+                                childLayer.biases[i] = (layer1.biases[i] + layer2.biases[i]) / 2;
+                            }
+                        }
+                    } else { // Object format
+                        for (const neuronIdx in childLayer.biases) {
+                            if (layer1.biases.hasOwnProperty(neuronIdx) && layer2.biases.hasOwnProperty(neuronIdx)) {
+                                childLayer.biases[neuronIdx] = (layer1.biases[neuronIdx] + layer2.biases[neuronIdx]) / 2;
+                            }
+                        }
+                    }
+                }
+
+                // Crossover weights
+                if (childLayer.weights && layer1.weights && layer2.weights) {
+                    // Assuming weights is an object of arrays: { '0': [w1, w2], '1': [w3, w4], ... }
+                    // Or an array of arrays: [ [w1, w2], [w3, w4], ...]
+                    if (Array.isArray(childLayer.weights)) { // Array of arrays (typical for brain.recurrent.RNNTimeStep)
+                         for (let i = 0; i < childLayer.weights.length; i++) { // Neuron index
+                            if (layer1.weights[i] && layer2.weights[i] && Array.isArray(childLayer.weights[i])) {
+                                for (let j = 0; j < childLayer.weights[i].length; j++) { // Weight index for this neuron
+                                    if (layer1.weights[i][j] !== undefined && layer2.weights[i][j] !== undefined) {
+                                        childLayer.weights[i][j] = (layer1.weights[i][j] + layer2.weights[i][j]) / 2;
+                                    }
+                                }
+                            }
+                        }
+                    } else { // Object of arrays (typical for brain.NeuralNetwork)
+                        for (const neuronIdx in childLayer.weights) { // neuronIdx is a string '0', '1', etc.
+                            if (layer1.weights.hasOwnProperty(neuronIdx) && layer2.weights.hasOwnProperty(neuronIdx) &&
+                                Array.isArray(childLayer.weights[neuronIdx])) {
+                                const weights1 = layer1.weights[neuronIdx];
+                                const weights2 = layer2.weights[neuronIdx];
+                                const childWeightsNeuron = childLayer.weights[neuronIdx];
+                                for (let j = 0; j < childWeightsNeuron.length; j++) {
+                                    if (weights1[j] !== undefined && weights2[j] !== undefined) {
+                                        childWeightsNeuron[j] = (weights1[j] + weights2[j]) / 2;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            return childJSON;
+        }
+
+        function mutate(networkJSON, rate, amount) {
+            if (!networkJSON) {
+                console.error("Mutate: networkJSON non défini.");
+                return null;
+            }
+
+            // Iterate through layers (similarly to crossover)
+            for (let l = 1; l < networkJSON.layers.length; l++) {
+                const layer = networkJSON.layers[l];
+
+                if (!layer) continue;
+
+                // Mutate biases
+                if (layer.biases) {
+                    if (Array.isArray(layer.biases)) {
+                        for (let i = 0; i < layer.biases.length; i++) {
+                            if (Math.random() < rate) {
+                                layer.biases[i] += (Math.random() * 2 - 1) * amount;
+                            }
+                        }
+                    } else { // Object format
+                        for (const neuronIdx in layer.biases) {
+                            if (layer.biases.hasOwnProperty(neuronIdx)) {
+                                if (Math.random() < rate) {
+                                    layer.biases[neuronIdx] += (Math.random() * 2 - 1) * amount;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Mutate weights
+                if (layer.weights) {
+                    if (Array.isArray(layer.weights)) { // Array of arrays
+                        for (let i = 0; i < layer.weights.length; i++) { // Neuron index
+                            if (Array.isArray(layer.weights[i])) {
+                                for (let j = 0; j < layer.weights[i].length; j++) { // Weight index
+                                    if (Math.random() < rate) {
+                                        layer.weights[i][j] += (Math.random() * 2 - 1) * amount;
+                                    }
+                                }
+                            }
+                        }
+                    } else { // Object of arrays
+                        for (const neuronIdx in layer.weights) {
+                            if (layer.weights.hasOwnProperty(neuronIdx) && Array.isArray(layer.weights[neuronIdx])) {
+                                const weightsNeuron = layer.weights[neuronIdx];
+                                for (let j = 0; j < weightsNeuron.length; j++) {
+                                    if (Math.random() < rate) {
+                                        weightsNeuron[j] += (Math.random() * 2 - 1) * amount;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            return networkJSON; // Return the (now mutated) JSON object
         }
 
         async function loadNeuralNetwork() {
