@@ -128,6 +128,12 @@
         let isTraining = false; // Will be managed by GA logic
         let gameLoopId;
         let showGhostIndividuals = false;
+
+        // Variables pour la gestion de l'inertie du focus en mode fantôme
+        let currentFocusedIndividual = 0;
+        let candidateForFocus = 0;
+        let framesAsCandidate = 0;
+        const FOCUS_CHANGE_THRESHOLD_FRAMES = 15; // ~0.25s à 60fps, ajustable
         // Old timer IDs (aiDecisionIntervalId, waveTimerId) removed.
         // Old single-instance state variables (neuralNetwork, square, circles, score, wave, trainingData, lastSquarePosition) removed.
 
@@ -184,15 +190,42 @@
                 const toggleGhostDisplayButton = document.getElementById('toggleGhostDisplayButton');
                 if (toggleGhostDisplayButton) { // S'assurer que le bouton existe avant d'ajouter l'écouteur
                     toggleGhostDisplayButton.addEventListener('click', () => {
-                        showGhostIndividuals = !showGhostIndividuals; // Inverser l'état
+                        showGhostIndividuals = !showGhostIndividuals;
+
                         if (showGhostIndividuals) {
                             toggleGhostDisplayButton.textContent = 'Cacher Fantômes';
                             toggleGhostDisplayButton.classList.remove('bg-sky-500', 'hover:bg-sky-600', 'focus:ring-sky-400');
-                            toggleGhostDisplayButton.classList.add('bg-amber-500', 'hover:bg-amber-600', 'focus:ring-amber-400'); // Changer de couleur pour l'état "actif"
+                            toggleGhostDisplayButton.classList.add('bg-amber-500', 'hover:bg-amber-600', 'focus:ring-amber-400');
+
+                            // --- NOUVELLE LOGIQUE D'INITIALISATION DU FOCUS ---
+                            if (Array.isArray(currentWaveScores) && currentWaveScores.length === POPULATION_SIZE) {
+                                let bestScore = -Infinity;
+                                let bestIndex = 0; // Défaut à 0 si aucun score n'est > -Infinity
+                                for (let i = 0; i < POPULATION_SIZE; i++) {
+                                    if (currentWaveScores[i] > bestScore) {
+                                        bestScore = currentWaveScores[i];
+                                        bestIndex = i;
+                                    }
+                                }
+                                currentFocusedIndividual = bestIndex;
+                                candidateForFocus = bestIndex;
+                                // Mettre framesAsCandidate au seuil pour un focus immédiat sur le meilleur actuel,
+                                // ou à 0 pour que le délai s'applique même au premier.
+                                // Pour un effet immédiat, utiliser FOCUS_CHANGE_THRESHOLD_FRAMES.
+                                framesAsCandidate = FOCUS_CHANGE_THRESHOLD_FRAMES;
+                            } else {
+                                // Pas de scores, initialiser au comportement par défaut
+                                currentFocusedIndividual = displayedIndividualIndex;
+                                candidateForFocus = displayedIndividualIndex;
+                                framesAsCandidate = 0;
+                            }
+                            // --- FIN NOUVELLE LOGIQUE ---
+
                         } else {
                             toggleGhostDisplayButton.textContent = 'Afficher Fantômes';
                             toggleGhostDisplayButton.classList.remove('bg-amber-500', 'hover:bg-amber-600', 'focus:ring-amber-400');
                             toggleGhostDisplayButton.classList.add('bg-sky-500', 'hover:bg-sky-600', 'focus:ring-sky-400'); // Revenir à la couleur initiale
+                            // La réinitialisation des variables de focus se fait maintenant dans draw() quand showGhostIndividuals est false.
                         }
 
                         // Si le jeu n'est pas activement en train de tourner (pas de boucle d'animation),
@@ -346,51 +379,75 @@ function draw() {
     if (!ctx) return;
     ctx.clearRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
 
-    let activeIndividualIndex = displayedIndividualIndex; // Par défaut, l'index global
-    let circlesForDisplay = populationCircles[activeIndividualIndex];
+    let activeIndividualIndex;
+    let circlesForDisplay;
 
     if (showGhostIndividuals && Array.isArray(currentWaveScores) && currentWaveScores.length === POPULATION_SIZE) {
-        let bestScore = -Infinity;
-        let potentialBestIndex = -1;
+        let bestScoreInThisFrame = -Infinity;
+        let bestScoreIndexInThisFrame = -1; // Default si aucun score positif ou si currentWaveScores est vide/invalide
+
         for (let i = 0; i < POPULATION_SIZE; i++) {
-            if (currentWaveScores[i] > bestScore) {
-                bestScore = currentWaveScores[i];
-                potentialBestIndex = i;
+            if (currentWaveScores[i] > bestScoreInThisFrame) {
+                bestScoreInThisFrame = currentWaveScores[i];
+                bestScoreIndexInThisFrame = i;
             }
         }
-        if (potentialBestIndex !== -1) {
-            activeIndividualIndex = potentialBestIndex;
+
+        // Si aucun individu n'a de score (ex: tous à 0 au début), on garde le focus actuel ou on se rabat sur 0
+        if (bestScoreIndexInThisFrame === -1) {
+            bestScoreIndexInThisFrame = currentFocusedIndividual; // Garder le focus actuel
         }
-        // S'assurer que les cercles correspondent au meilleur individu s'il est trouvé,
-        // ou à l'index actif par défaut sinon.
+
+        if (bestScoreIndexInThisFrame === candidateForFocus) {
+            framesAsCandidate++;
+        } else {
+            candidateForFocus = bestScoreIndexInThisFrame;
+            framesAsCandidate = 1;
+        }
+
+        if (framesAsCandidate >= FOCUS_CHANGE_THRESHOLD_FRAMES) {
+            currentFocusedIndividual = candidateForFocus;
+        }
+
+        activeIndividualIndex = currentFocusedIndividual;
+
+        // S'assurer que les cercles correspondent à l'individu en focus
         if (populationCircles && populationCircles[activeIndividualIndex]) {
              circlesForDisplay = populationCircles[activeIndividualIndex];
         } else if (populationCircles && populationCircles[displayedIndividualIndex]) {
-             // Fallback si populationCircles[activeIndividualIndex] n'existe pas pour une raison
+             // Fallback de sécurité si populationCircles[activeIndividualIndex] n'est pas prêt
              circlesForDisplay = populationCircles[displayedIndividualIndex];
              activeIndividualIndex = displayedIndividualIndex; // Revenir à l'index global sûr
+             currentFocusedIndividual = displayedIndividualIndex; // Réinitialiser le focus aussi
         } else {
-             circlesForDisplay = []; // Aucun cercle à afficher
+             circlesForDisplay = [];
         }
-    } else if (populationCircles && populationCircles[displayedIndividualIndex]){
-        // Mode non-fantôme ou scores non disponibles, utiliser l'index global
-        circlesForDisplay = populationCircles[displayedIndividualIndex];
+
     } else {
-        circlesForDisplay = [];
+        // Mode non-fantôme ou scores non disponibles
+        activeIndividualIndex = displayedIndividualIndex;
+        if (populationCircles && populationCircles[activeIndividualIndex]) {
+            circlesForDisplay = populationCircles[activeIndividualIndex];
+        } else {
+            circlesForDisplay = [];
+        }
+        // Réinitialiser l'état du focus quand on n'est pas en mode fantôme
+        currentFocusedIndividual = displayedIndividualIndex; // ou activeIndividualIndex ici
+        candidateForFocus = displayedIndividualIndex; // ou activeIndividualIndex ici
+        framesAsCandidate = 0;
     }
 
-
     // --- Dessin des fantômes (si activé) ---
+    // La logique ici reste la même : elle utilise activeIndividualIndex (qui est maintenant currentFocusedIndividual en mode fantôme)
+    // pour déterminer qui ne PAS dessiner comme fantôme.
     if (showGhostIndividuals && Array.isArray(squares) && Array.isArray(neuralNetworks)) {
         for (let i = 0; i < POPULATION_SIZE; i++) {
-            if (i === activeIndividualIndex) { // Utiliser activeIndividualIndex ici
+            if (i === activeIndividualIndex) {
                 continue;
             }
-            // ... (le reste du code de dessin des fantômes reste identique à avant,
-            // s'assurant qu'il utilise ghostSquare = squares[i] etc.) ...
             const ghostSquare = squares[i];
+            // ... (reste du code de dessin des fantômes) ...
             const ghostNetwork = neuralNetworks[i];
-
             if (ghostSquare && ghostNetwork && ghostNetwork.colorDisplay) {
                 let ghostColor = ghostNetwork.colorDisplay.replace(/, ?\d+(\.\d+)?\)/, ', 0.05)');
                 if (!ghostColor.includes('rgba')) {
@@ -404,16 +461,16 @@ function draw() {
         }
     }
 
-    // --- Dessin de l'individu principal (maintenant activeIndividualIndex) ---
-    if (activeIndividualIndex < 0 || activeIndividualIndex >= POPULATION_SIZE || !squares[activeIndividualIndex]) {
+    // --- Dessin de l'individu principal (activeIndividualIndex) ---
+    // Le reste de la fonction (dessin de activeIndividualIndex et circlesForDisplay) reste identique.
+    // ... (code existant pour dessiner currentSquareToDraw = squares[activeIndividualIndex] et circlesForDisplay) ...
+     if (activeIndividualIndex < 0 || activeIndividualIndex >= POPULATION_SIZE || !squares[activeIndividualIndex]) {
         return;
     }
-
     const currentSquareToDraw = squares[activeIndividualIndex];
     if (!currentSquareToDraw) {
         return;
     }
-
     if (neuralNetworks && neuralNetworks[activeIndividualIndex] && neuralNetworks[activeIndividualIndex].colorDisplay) {
         ctx.fillStyle = neuralNetworks[activeIndividualIndex].colorDisplay;
     } else {
@@ -424,8 +481,7 @@ function draw() {
     ctx.lineWidth = 2;
     ctx.strokeRect(currentSquareToDraw.x, currentSquareToDraw.y, currentSquareToDraw.size, currentSquareToDraw.size);
 
-    // --- Dessin des cercles (maintenant circlesForDisplay) ---
-    if (circlesForDisplay) { // Vérifier si circlesForDisplay est défini
+    if (circlesForDisplay) {
         circlesForDisplay.forEach(circle => {
             if (!circle.collected) {
                 ctx.beginPath();
