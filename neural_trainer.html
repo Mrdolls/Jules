@@ -753,15 +753,16 @@ async function processEndOfGenerationEvaluation() {
     console.log("[processEndOfGenEval] Top 5 individus (index original, score):",
                 scoredNetworks.slice(0, 5).map(s => ({idx: s.index, score: s.score.toFixed(2)})));
 
-    let nextGenerationJSONs = [];
+    let nextGenerationData = []; // Nouvelle initialisation pour stocker objets {json, wasMutated}
+
     // Elitism
     for (let i = 0; i < ELITISM_COUNT && i < scoredNetworks.length; i++) {
         // console.log(\`[processEndOfGenEval] Élite \${i+1}: Ind. original \${scoredNetworks[i].index} (Score: \${scoredNetworks[i].score.toFixed(2)})\`);
-        nextGenerationJSONs.push(scoredNetworks[i].networkJSON);
+        nextGenerationData.push({ json: scoredNetworks[i].networkJSON, wasMutated: false }); // Nouveau
     }
 
     // Crossover & Mutation for the rest
-    let childrenNeeded = POPULATION_SIZE - nextGenerationJSONs.length;
+    let childrenNeeded = POPULATION_SIZE - nextGenerationData.length;
     if (scoredNetworks.length > 0 && childrenNeeded > 0) {
         const bestParentJSON = scoredNetworks[0].networkJSON;
         for (let i = 0; i < childrenNeeded; i++) {
@@ -774,43 +775,63 @@ async function processEndOfGenerationEvaluation() {
             const parent2JSON = scoredNetworks[parent2Index] ? scoredNetworks[parent2Index].networkJSON : bestParentJSON; // Fallback for safety
             // console.log(\`[processEndOfGenEval] Croisement enfant \${i}: Elite 0 avec Ind. original \${scoredNetworks[parent2Index] ? scoredNetworks[parent2Index].index : scoredNetworks[0].index}\`);
             let childJson = crossover(bestParentJSON, parent2JSON);
+            let childMutationResult; // Renamed from childMutationStatus for clarity
+
             if (childJson) {
-                childJson = mutate(childJson, MUTATION_RATE, MUTATION_AMOUNT);
-                nextGenerationJSONs.push(childJson);
+                childMutationResult = mutate(childJson, MUTATION_RATE, MUTATION_AMOUNT);
+                nextGenerationData.push({ json: childMutationResult.mutatedJson, wasMutated: childMutationResult.didMutate }); // Nouveau
             } else {
                 console.warn("[processEndOfGenEval] Crossover a retourné null, copie du meilleur parent (muté).");
-                let fallbackChild = JSON.parse(JSON.stringify(bestParentJSON));
-                fallbackChild = mutate(fallbackChild, MUTATION_RATE, MUTATION_AMOUNT);
-                nextGenerationJSONs.push(fallbackChild);
+                let fallbackChildJson = JSON.parse(JSON.stringify(bestParentJSON));
+                childMutationResult = mutate(fallbackChildJson, MUTATION_RATE, MUTATION_AMOUNT);
+                nextGenerationData.push({ json: childMutationResult.mutatedJson, wasMutated: childMutationResult.didMutate }); // Nouveau
             }
         }
     } else if (childrenNeeded > 0) {
          console.warn("[processEndOfGenEval] Pas de réseaux valides pour la reproduction. Remplissage avec de nouveaux réseaux (non entraînés).");
          for (let i = 0; i < childrenNeeded; i++) {
              const tempNet = new brain.NeuralNetwork({hiddenLayers: [12,12], activation: 'sigmoid'});
-             // Dummy training is async, cannot easily do it here. These will be "fresh" networks.
-             nextGenerationJSONs.push(tempNet.toJSON());
+             // Ces nouveaux réseaux ne sont pas "mutés" dans ce cycle de reproduction.
+             nextGenerationData.push({ json: tempNet.toJSON(), wasMutated: false }); // Nouveau
          }
     }
 
     // Repopulate neuralNetworks with new instances
     const newNeuralNetworks = [];
-    for (let i = 0; i < POPULATION_SIZE; i++) { // Ensure exactly POPULATION_SIZE networks
-        let netJSON = nextGenerationJSONs[i];
-        if (!netJSON) { // If not enough children were generated, fill with new ones
+    for (let i = 0; i < POPULATION_SIZE; i++) {
+        let networkDataEntry = nextGenerationData[i]; // Récupérer l'objet {json, wasMutated}
+        let netJSON;
+
+        if (!networkDataEntry || !networkDataEntry.json) {
             console.warn(`[processEndOfGenEval] Manque de JSON pour l'individu \${i}, création d'un nouveau réseau.`);
             const tempNet = new brain.NeuralNetwork({hiddenLayers: [12,12], activation: 'sigmoid'});
-            // Ideally, initialize with dummy training here if possible, or rely on first wave training
             netJSON = tempNet.toJSON();
+            // On considère ce nouveau réseau comme non-muté dans ce cycle
+            networkDataEntry = { json: netJSON, wasMutated: false };
+        } else {
+            netJSON = networkDataEntry.json;
         }
+
         try {
             const net = new window.brain.NeuralNetwork().fromJSON(netJSON);
-            net.colorDisplay = individualColors[i % individualColors.length];
+            net.wasMutatedThisGeneration = networkDataEntry.wasMutated; // Déjà ajouté à l'étape 2
+
+            if (net.wasMutatedThisGeneration) {
+                let newColorIndex = Math.floor(Math.random() * individualColors.length);
+                if (individualColors.length > 1 && newColorIndex === (i % individualColors.length)) {
+                    newColorIndex = (newColorIndex + 1) % individualColors.length;
+                }
+                net.colorDisplay = individualColors[newColorIndex];
+                console.log(`Individu ${i} a muté et reçoit la nouvelle couleur : ${net.colorDisplay}`); // Log pour débogage
+            } else {
+                net.colorDisplay = individualColors[i % individualColors.length];
+            }
             newNeuralNetworks.push(net);
         } catch(e) {
             console.error(`Erreur fromJSON pour l'individu \${i}, utilisation d'un fallback.`, e, netJSON);
             const fallbackNet = new window.brain.NeuralNetwork({hiddenLayers: [12,12], activation: 'sigmoid'});
-            fallbackNet.colorDisplay = individualColors[i % individualColors.length];
+            fallbackNet.wasMutatedThisGeneration = false; // Non muté par défaut
+            fallbackNet.colorDisplay = individualColors[i % individualColors.length]; // Couleur normale pour fallback
             newNeuralNetworks.push(fallbackNet);
         }
     }
@@ -926,8 +947,16 @@ function crossover(networkJSON1, networkJSON2) {
 function mutate(networkJSON, rate, amount) {
     if (!networkJSON || !networkJSON.layers) {
         console.error("Mutate: networkJSON non défini ou sans couches.");
-        return networkJSON; // Return as is if invalid
+        return { mutatedJson: networkJSON, didMutate: false }; // Retourner l'objet avec statut
     }
+
+    let actualMutationOccurred = false; // Initialiser l'indicateur
+
+    // Copie profonde du JSON pour éviter de modifier l'original si aucune mutation n'a lieu
+    // ou pour s'assurer que les modifications sont sur une nouvelle copie.
+    // Cependant, la structure actuelle modifie networkJSON en place.
+    // Pour rester cohérent avec le retour {mutatedJson: networkJSON, ...},
+    // il est implicite que networkJSON est l'objet qui a été modifié.
 
     for (let l = 1; l < networkJSON.layers.length; l++) { // Start from layer 1
         const layer = networkJSON.layers[l];
@@ -939,6 +968,7 @@ function mutate(networkJSON, rate, amount) {
                 for (let i = 0; i < layer.biases.length; i++) {
                     if (Math.random() < rate) {
                         layer.biases[i] += (Math.random() * 2 - 1) * amount;
+                        actualMutationOccurred = true; // Mutation effectuée
                     }
                 }
             } else { // Object format
@@ -946,6 +976,7 @@ function mutate(networkJSON, rate, amount) {
                     if (layer.biases.hasOwnProperty(neuronIdx)) {
                         if (Math.random() < rate) {
                             layer.biases[neuronIdx] += (Math.random() * 2 - 1) * amount;
+                            actualMutationOccurred = true; // Mutation effectuée
                         }
                     }
                 }
@@ -960,6 +991,7 @@ function mutate(networkJSON, rate, amount) {
                         for (let j = 0; j < layer.weights[i].length; j++) {
                             if (Math.random() < rate) {
                                 layer.weights[i][j] += (Math.random() * 2 - 1) * amount;
+                                actualMutationOccurred = true; // Mutation effectuée
                             }
                         }
                     }
@@ -971,6 +1003,7 @@ function mutate(networkJSON, rate, amount) {
                         for (let j = 0; j < weightsNeuron.length; j++) {
                             if (Math.random() < rate) {
                                 weightsNeuron[j] += (Math.random() * 2 - 1) * amount;
+                                actualMutationOccurred = true; // Mutation effectuée
                             }
                         }
                     }
@@ -978,7 +1011,7 @@ function mutate(networkJSON, rate, amount) {
             }
         }
     }
-    return networkJSON;
+    return { mutatedJson: networkJSON, didMutate: actualMutationOccurred }; // Retourner l'objet
 }
 
 function endTrainingSession() {
