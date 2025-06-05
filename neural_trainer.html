@@ -22,7 +22,7 @@
     </style>
 </head>
 <body class="bg-gradient-to-br from-blue-500 to-purple-600 min-h-screen flex items-center justify-center p-4 font-sans">
-    <div class="bg-white p-8 rounded-xl shadow-2xl w-full max-w-4xl flex flex-col md:flex-row gap-8">
+    <div class="bg-white p-8 rounded-xl shadow-2xl w-full max-w-5xl flex flex-col md:flex-row gap-8">
         <!-- Contrôles et Informations -->
         <div class="flex-1 flex flex-col gap-4">
             <h1 class="text-3xl font-bold text-gray-800 mb-4 text-center">Entraîneur de Réseau de Neurones</h1>
@@ -977,7 +977,7 @@ function endTrainingSession() {
     // currentIndividualDisplaySpan logic removed as per request
 
     if (isTraining && currentStepInGeneration > 0 && currentStepInGeneration <= STEPS_PER_GENERATION_EVALUATION) {
-        statusMessageSpan.textContent = `Gén. \${currentGeneration}, Ind. \${displayIdx + 1}/\${POPULATION_SIZE}, Étape \${currentStepInGeneration}/\${STEPS_PER_GENERATION_EVALUATION}`;
+        statusMessageSpan.textContent = `Gén. ${currentGeneration}, Ind. ${displayIdx + 1}/${POPULATION_SIZE}, Étape ${currentStepInGeneration}/${STEPS_PER_GENERATION_EVALUATION}`;
     }
 }
 
