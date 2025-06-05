@@ -601,7 +601,7 @@ function startTraining() {
     }
     // lastSquarePositions will be initialized by initGame
     if(statusMessageSpan) {
-        statusMessageSpan.textContent = `Initialisation Gén. \${currentGeneration}...`;
+        statusMessageSpan.textContent = `Initialisation Gén. \${currentGeneration}, Ind. \${displayedIndividualIndex + 1}/\${POPULATION_SIZE}...`;
         statusMessageSpan.classList.remove('text-yellow-600', 'text-green-600', 'text-purple-600');
         statusMessageSpan.classList.add('text-blue-600');
     }
@@ -785,7 +785,7 @@ async function processEndOfGenerationEvaluation() {
     }
     if(epsilonDisplay) epsilonDisplay.textContent = epsilon.toFixed(2);
 
-    if(statusMessageSpan) statusMessageSpan.textContent = `Gén. \${currentGeneration}, Ind. \${displayedIndividualIndex + 1}/\${POPULATION_SIZE}...`; // Update status for new gen
+    if(statusMessageSpan) statusMessageSpan.textContent = `Prêt pour Gén. \${currentGeneration}, Ind. \${displayedIndividualIndex + 1}/\${POPULATION_SIZE}...`; // Update status for new gen
     updateUI();
 
     runGenerationEvaluationStep();
@@ -974,13 +974,10 @@ function endTrainingSession() {
     waveNumberSpan.textContent = currentGeneration;
     epsilonDisplay.textContent = epsilon.toFixed(2);
 
-    const currentIndividualDisplaySpan = document.getElementById('currentIndividualDisplay');
-    if (currentIndividualDisplaySpan) {
-        if (isTraining) {
-            currentIndividualDisplaySpan.textContent = `\${displayIdx + 1} / \${POPULATION_SIZE}`;
-        } else {
-            currentIndividualDisplaySpan.textContent = "N/A";
-        }
+    // currentIndividualDisplaySpan logic removed as per request
+
+    if (isTraining && currentStepInGeneration > 0 && currentStepInGeneration <= STEPS_PER_GENERATION_EVALUATION) {
+        statusMessageSpan.textContent = `Gén. \${currentGeneration}, Ind. \${displayIdx + 1}/\${POPULATION_SIZE}, Étape \${currentStepInGeneration}/\${STEPS_PER_GENERATION_EVALUATION}`;
     }
 }
 
