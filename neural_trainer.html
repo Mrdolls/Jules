@@ -39,6 +39,11 @@
                 <p class="text-gray-700 text-sm"><span class="font-semibold">Epsilon (Exploration):</span> <span id="epsilonDisplay" class="font-bold text-teal-600">N/A</span></p>
             </div>
 
+            <button id="toggleGhostDisplayButton"
+                    class="bg-sky-500 hover:bg-sky-600 text-white font-bold py-2 px-4 rounded-lg shadow-md transition duration-300 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-sky-400 focus:ring-opacity-75 mt-2">
+                Afficher Fantômes
+            </button>
+
             <div class="mt-auto pt-4 border-t border-gray-200">
                 <h2 class="text-xl font-semibold text-gray-800 mb-2">Instructions:</h2>
                 <ul class="list-disc list-inside text-gray-600 text-sm">
@@ -118,6 +123,7 @@
 
         let isTraining = false; // Will be managed by GA logic
         let gameLoopId;
+        let showGhostIndividuals = false;
         // Old timer IDs (aiDecisionIntervalId, waveTimerId) removed.
         // Old single-instance state variables (neuralNetwork, square, circles, score, wave, trainingData, lastSquarePosition) removed.
 
@@ -170,6 +176,29 @@
                 statusMessageSpan.classList.add('text-green-600');
 
                 startButton.addEventListener('click', toggleTraining);
+
+                const toggleGhostDisplayButton = document.getElementById('toggleGhostDisplayButton');
+                if (toggleGhostDisplayButton) { // S'assurer que le bouton existe avant d'ajouter l'écouteur
+                    toggleGhostDisplayButton.addEventListener('click', () => {
+                        showGhostIndividuals = !showGhostIndividuals; // Inverser l'état
+                        if (showGhostIndividuals) {
+                            toggleGhostDisplayButton.textContent = 'Cacher Fantômes';
+                            toggleGhostDisplayButton.classList.remove('bg-sky-500', 'hover:bg-sky-600', 'focus:ring-sky-400');
+                            toggleGhostDisplayButton.classList.add('bg-amber-500', 'hover:bg-amber-600', 'focus:ring-amber-400'); // Changer de couleur pour l'état "actif"
+                        } else {
+                            toggleGhostDisplayButton.textContent = 'Afficher Fantômes';
+                            toggleGhostDisplayButton.classList.remove('bg-amber-500', 'hover:bg-amber-600', 'focus:ring-amber-400');
+                            toggleGhostDisplayButton.classList.add('bg-sky-500', 'hover:bg-sky-600', 'focus:ring-sky-400'); // Revenir à la couleur initiale
+                        }
+
+                        // Si le jeu n'est pas activement en train de tourner (pas de boucle d'animation),
+                        // et que le canvas et le contexte sont prêts, forcer un redessin.
+                        if (!isTraining && ctx && typeof draw === 'function') {
+                            draw();
+                        }
+                    });
+                }
+
                 // Initialize lastSquarePosition only if square is defined (after initGame)
                 if (square) {
                     lastSquarePosition = { x: square.x, y: square.y };
@@ -313,39 +342,74 @@ function draw() {
     if (!ctx) return;
     ctx.clearRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
 
-    // Ensure displayedIndividualIndex is valid
-    if (displayedIndividualIndex < 0 || displayedIndividualIndex >= POPULATION_SIZE) {
-        // console.warn(\`[draw] displayedIndividualIndex (\${displayedIndividualIndex}) hors limites.\`);
-        // Potentially draw a "no data" state or simply return
+    // --- Début de l'ajout pour les fantômes ---
+    if (showGhostIndividuals && Array.isArray(squares) && Array.isArray(neuralNetworks)) {
+        for (let i = 0; i < POPULATION_SIZE; i++) {
+            if (i === displayedIndividualIndex) {
+                continue; // Ne pas dessiner l'individu principal comme un fantôme
+            }
+
+            const ghostSquare = squares[i];
+            const ghostNetwork = neuralNetworks[i];
+
+            if (ghostSquare && ghostNetwork && ghostNetwork.colorDisplay) {
+                // Conserver la couleur originale mais la rendre beaucoup plus transparente
+                // Exemple: 'rgba(59, 130, 246, 0.9)' devient 'rgba(59, 130, 246, 0.05)'
+                let ghostColor = ghostNetwork.colorDisplay.replace(/, ?\d+(\.\d+)?\)/, ', 0.05)');
+
+                // Si la couleur n'a pas de canal alpha (par exemple, format rgb() ou couleur nommée)
+                // on la transforme en rgba avec faible alpha. Ceci est une gestion basique.
+                if (!ghostColor.includes('rgba')) {
+                    if (ghostColor.startsWith('rgb(')) {
+                        ghostColor = ghostColor.replace('rgb(', 'rgba(').replace(')', ', 0.05)');
+                    } else {
+                        // Pour les couleurs nommées ou hex, il faudrait une conversion plus complexe.
+                        // On utilise un gris par défaut pour simplifier si la couleur n'est pas déjà rgba.
+                        // Ou on s'assure que toutes les 'colorDisplay' sont en format 'rgba'.
+                        // Supposons pour l'instant que colorDisplay est toujours 'rgba(..., ..., ..., 0.9)'.
+                    }
+                }
+
+                ctx.fillStyle = ghostColor;
+                ctx.fillRect(ghostSquare.x, ghostSquare.y, ghostSquare.size, ghostSquare.size);
+            }
+        }
+    }
+    // --- Fin de l'ajout pour les fantômes ---
+
+    // Ensure displayedIndividualIndex is valid (code existant)
+    if (displayedIndividualIndex < 0 || displayedIndividualIndex >= POPULATION_SIZE || !squares[displayedIndividualIndex]) {
+        // console.warn(\`[draw] displayedIndividualIndex (\${displayedIndividualIndex}) hors limites ou carré non défini.\`);
         return;
     }
 
     const currentSquareToDraw = squares[displayedIndividualIndex];
-    const currentCirclesToDraw = populationCircles[displayedIndividualIndex];
+    // const currentCirclesToDraw = populationCircles[displayedIndividualIndex]; // Déjà existant, si besoin plus tard
 
     if (!currentSquareToDraw) {
-        // This can happen if initGame hasn't run yet for this specific displayedIndividualIndex after a population reset
         // console.log(\`[draw] Pas de carré à dessiner pour l'individu \${displayedIndividualIndex}\`);
         return;
     }
 
-    // Set fillStyle based on the displayed individual's network color
+    // Set fillStyle based on the displayed individual's network color (code existant)
     if (neuralNetworks && neuralNetworks[displayedIndividualIndex] && neuralNetworks[displayedIndividualIndex].colorDisplay) {
         ctx.fillStyle = neuralNetworks[displayedIndividualIndex].colorDisplay;
     } else {
-        ctx.fillStyle = 'rgba(59, 130, 246, 0.9)'; // Fallback color
+        ctx.fillStyle = 'rgba(59, 130, 246, 0.9)'; // Fallback color (code existant)
     }
     ctx.fillRect(currentSquareToDraw.x, currentSquareToDraw.y, currentSquareToDraw.size, currentSquareToDraw.size);
-    ctx.strokeStyle = '#2563eb';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(currentSquareToDraw.x, currentSquareToDraw.y, currentSquareToDraw.size, currentSquareToDraw.size);
+    ctx.strokeStyle = '#2563eb'; // (code existant)
+    ctx.lineWidth = 2; // (code existant)
+    ctx.strokeRect(currentSquareToDraw.x, currentSquareToDraw.y, currentSquareToDraw.size, currentSquareToDraw.size); // (code existant)
 
+    // Dessiner les cercles (code existant)
+    const currentCirclesToDraw = populationCircles[displayedIndividualIndex]; // S'assurer qu'il est défini ici
     if (currentCirclesToDraw) {
         currentCirclesToDraw.forEach(circle => {
             if (!circle.collected) {
                 ctx.beginPath();
                 ctx.arc(circle.x, circle.y, circle.radius, 0, Math.PI * 2);
-                ctx.fillStyle = 'rgba(16, 185, 129, 0.9)'; // Circle color can be constant
+                ctx.fillStyle = 'rgba(16, 185, 129, 0.9)';
                 ctx.fill();
                 ctx.strokeStyle = '#047857';
                 ctx.lineWidth = 2;
