@@ -70,19 +70,19 @@
         const SQUARE_SIZE = 25;
         const CIRCLE_RADIUS = 10;
         const INITIAL_CIRCLES = 5;
-        const WAVE_DURATION = 2000; // 2 secondes en millisecondes pour une vague (génération)
+        const WAVE_DURATION = 5000; // 5 secondes en millisecondes pour une vague (génération)
         const MAX_WAVES = 100;
         // const AI_DECISION_INTERVAL = 100; // L\'IA prend une décision toutes les 100 ms // Removed old
 
         // Récompenses et pénalités
-        const REWARD_COLLECT_CIRCLE = 10;
-        const PENALTY_IDLE = -0.01;
+        const REWARD_COLLECT_CIRCLE = 25;
+        const PENALTY_IDLE = -0.05;
         const PENALTY_WALL_COLLISION = -1;
         const REWARD_MOVE_TOWARDS_CIRCLE = 0.2;
 
         // Nouvelles constantes pour la récompense de direction
-        const NEW_REWARD_DIRECT_HEADING = 0.3;
-        const NEW_PENALTY_WRONG_HEADING = 0.15;
+        const NEW_REWARD_DIRECT_HEADING = 0.5;
+        const NEW_PENALTY_WRONG_HEADING = 0.25;
 
         // Variables du jeu
         let canvas, ctx;
@@ -90,8 +90,8 @@
         // --- Population & Genetic Algorithm Constants ---
         const POPULATION_SIZE = 10;
         const ELITISM_COUNT = 2;
-        const MUTATION_RATE = 0.05;
-        const MUTATION_AMOUNT = 0.1;
+        const MUTATION_RATE = 0.08;
+        const MUTATION_AMOUNT = 0.15;
 
         // --- Fixed Simulation Parameters ---
         // const WAVE_DURATION = 2000; // Value now taken from the top definition, this comment can be removed or kept.
@@ -658,7 +658,7 @@ function calculateReward(action, inputs, individualIndex, moveDx, moveDy) {
             // Calculer le produit scalaire
             const dotProduct = (moveVecNormX * vecToCircleX) + (moveVecNormY * vecToCircleY);
 
-            const HEADING_THRESHOLD_POSITIVE = 0.7; // Seuil pour bonne direction
+            const HEADING_THRESHOLD_POSITIVE = 0.5; // Seuil pour bonne direction
             const HEADING_THRESHOLD_NEGATIVE = -0.7; // Seuil pour mauvaise direction (déjà défini)
 
             if (dotProduct > HEADING_THRESHOLD_POSITIVE) {
@@ -1303,3 +1303,5 @@ async function createNewNeuralNetwork() {
     </script>
 </body>
 </html>
+
+[end of neural_trainer.html]
