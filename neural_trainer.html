@@ -32,20 +32,9 @@
                 Lancer l'entraînement
             </button>
 
-            <div class="mt-4">
-                <label for="speedControl" class="block text-gray-700 text-sm font-semibold mb-2">Vitesse de la simulation:</label>
-                <input type="range" id="speedControl" min="1" max="10" value="5"
-                       class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer range-lg">
-                <div class="flex justify-between text-xs text-gray-600 mt-1">
-                    <span>Lent</span>
-                    <span>Rapide</span>
-                </div>
-            </div>
-
             <div class="mt-6 p-4 bg-gray-100 rounded-lg shadow-inner">
-                <p class="text-gray-700 text-lg mb-2"><span class="font-semibold">Génération actuelle:</span> <span id="waveNumber" class="font-bold text-blue-700">0</span> / <span id="maxWavesDisplay">100</span></p>
-                <p class="text-gray-700 text-lg mb-2"><span class="font-semibold">Score de l'individu:</span> <span id="currentScore" class="font-bold text-purple-700">0</span></p>
-                <p class="text-gray-700 text-lg mb-2"><span class="font-semibold">Individu évalué:</span> <span id="currentIndividualDisplay" class="font-bold text-cyan-700">N/A</span></p>
+                <p class="text-gray-700 text-lg mb-2"><span class="font-semibold">Vague actuelle:</span> <span id="waveNumber" class="font-bold text-blue-700">0</span> / <span id="maxWavesDisplay">100</span></p>
+                <p class="text-gray-700 text-lg mb-2"><span class="font-semibold">Score de la vague:</span> <span id="currentScore" class="font-bold text-purple-700">0</span></p>
                 <p class="text-gray-700 text-lg mb-1"><span class="font-semibold">Statut:</span> <span id="statusMessage" class="font-bold text-yellow-600">Chargement...</span></p>
                 <p class="text-gray-700 text-sm"><span class="font-semibold">Epsilon (Exploration):</span> <span id="epsilonDisplay" class="font-bold text-teal-600">N/A</span></p>
             </div>
@@ -78,10 +67,7 @@
         const INITIAL_CIRCLES = 5;
         const WAVE_DURATION = 20000; // 20 secondes en millisecondes
         const MAX_WAVES = 100;
-        const BASE_WAVE_DURATION = 20000; // 20 secondes en millisecondes
-        const BASE_AI_DECISION_INTERVAL = 5; // L'IA prend une décision toutes les 5 ms (valeur de base)
-        const TARGET_AI_ITERATIONS = BASE_WAVE_DURATION / BASE_AI_DECISION_INTERVAL; // Cible de 4000 itérations
-        const MIN_AI_DECISION_INTERVAL = 4; // Plancher pour l'intervalle de décision de l'IA en ms
+        const AI_DECISION_INTERVAL = 100; // L\'IA prend une décision toutes les 100 ms
 
         // Récompenses et pénalités
         const REWARD_COLLECT_CIRCLE = 10;
@@ -91,46 +77,49 @@
 
         // Variables du jeu
         let canvas, ctx;
-        // let neuralNetwork; // Removed for population-based approach
 
+        // --- Population & Genetic Algorithm Constants ---
         const POPULATION_SIZE = 10;
-        const ELITISM_COUNT = 2; // Number of best individuals to carry over directly
-        const MUTATION_RATE = 0.05; // 5% chance for each weight/bias to mutate
-        const MUTATION_AMOUNT = 0.1;  // Max +/- amount for mutation
-        let neuralNetworks = []; // Will store instances of Brain.js networks
-        let individualScores = new Array(POPULATION_SIZE).fill(0); // Stores final scores for the current generation
+        const ELITISM_COUNT = 2;
+        const MUTATION_RATE = 0.05;
+        const MUTATION_AMOUNT = 0.1;
+
+        // --- Fixed Simulation Parameters ---
+        // const WAVE_DURATION = 20000; // Already defined above, ensure it's kept if needed or remove duplicate
+        const AI_DECISION_INTERVAL = 5; // Fixed interval for AI decisions
+        const STEPS_PER_GENERATION_EVALUATION = WAVE_DURATION / AI_DECISION_INTERVAL; // 4000
+
+        // --- Population State Variables ---
+        let neuralNetworks = [];
+        let individualScores = new Array(POPULATION_SIZE).fill(0);
         const individualColors = [
-            "rgba(59, 130, 246, 0.9)",   // Blue
-            "rgba(239, 68, 68, 0.9)",    // Red
-            "rgba(16, 185, 129, 0.9)",   // Green
-            "rgba(245, 158, 11, 0.9)",   // Amber
-            "rgba(139, 92, 246, 0.9)",   // Violet
-            "rgba(236, 72, 153, 0.9)",   // Pink
-            "rgba(20, 184, 166, 0.9)",   // Teal
-            "rgba(249, 115, 22, 0.9)",   // Orange
-            "rgba(107, 114, 128, 0.9)",  // Gray
-            "rgba(163, 230, 53, 0.9)"    // Lime
+            "rgba(59, 130, 246, 0.9)", "rgba(239, 68, 68, 0.9)", "rgba(16, 185, 129, 0.9)",
+            "rgba(245, 158, 11, 0.9)", "rgba(139, 92, 246, 0.9)", "rgba(236, 72, 153, 0.9)",
+            "rgba(20, 184, 166, 0.9)", "rgba(249, 115, 22, 0.9)", "rgba(107, 114, 128, 0.9)",
+            "rgba(163, 230, 53, 0.9)"
         ];
-        let currentIndividualIndex = 0;
+        let currentIndividualIndex = 0; // Primarily for loops, displayedIndividualIndex is for rendering
         let currentGeneration = 1;
-        let currentGenerationCircleData = []; // To store circle positions for the current generation
+        let currentGenerationCircleData = [];
 
-        let square;
-        let circles = [];
-        let score = 0;
-        // let wave = 0; // Replaced by currentGeneration for overall progress
-        let isTraining = false;
-        let simulationSpeed = 1;
+        // --- Individual Game States (Population Arrays) ---
+        let squares = new Array(POPULATION_SIZE);
+        let populationCircles = new Array(POPULATION_SIZE);
+        let currentWaveScores = new Array(POPULATION_SIZE).fill(0);
+        let populationTrainingData = new Array(POPULATION_SIZE);
+        for (let i = 0; i < POPULATION_SIZE; i++) { // Initialize inner arrays for training data
+            populationTrainingData[i] = [];
+        }
+        let lastSquarePositions = new Array(POPULATION_SIZE);
+
+        // --- Simulation Step Tracking ---
+        let currentStepInGeneration = 0;
+        let displayedIndividualIndex = 0; // Index of the NN to display
+
+        let isTraining = false; // Will be managed by GA logic
         let gameLoopId;
-        let aiDecisionIntervalId;
-        let waveTimerId;
-
-        let currentRealWaveDuration = BASE_WAVE_DURATION;
-        let currentAiDecisionInterval = BASE_AI_DECISION_INTERVAL;
-        let aiDecisionCounter = 0;
-
-        let trainingData = [];
-        let lastSquarePosition = { x: 0, y: 0 };
+        // Old timer IDs (aiDecisionIntervalId, waveTimerId) removed.
+        // Old single-instance state variables (neuralNetwork, square, circles, score, wave, trainingData, lastSquarePosition) removed.
 
         // Exploration (Epsilon-greedy)
         let epsilon = 0.5; // Initial exploration rate
@@ -138,426 +127,447 @@
         const finalEpsilon = 0.01; // Minimum exploration rate
         // Epsilon will decay linearly over MAX_WAVES
 
-        const OUTPUT_ACTIONS = ['idle', 'up', 'down', 'left', 'right'];
+        const OUTPUT_ACTIONS = [\'idle\', \'up\', \'down\', \'left\', \'right\'];
 
         // Éléments DOM
-        const startButton = document.getElementById('startButton');
-        const speedControl = document.getElementById('speedControl');
-        const waveNumberSpan = document.getElementById('waveNumber');
-        const currentScoreSpan = document.getElementById('currentScore');
-        const statusMessageSpan = document.getElementById('statusMessage');
-        const maxWavesDisplay = document.getElementById('maxWavesDisplay');
-        const epsilonDisplay = document.getElementById('epsilonDisplay');
+        const startButton = document.getElementById(\'startButton\');
+        const waveNumberSpan = document.getElementById(\'waveNumber\');
+        const currentScoreSpan = document.getElementById(\'currentScore\');
+        const statusMessageSpan = document.getElementById(\'statusMessage\');
+        const maxWavesDisplay = document.getElementById(\'maxWavesDisplay\');
+        const epsilonDisplay = document.getElementById(\'epsilonDisplay\');
 
         const delay = ms => new Promise(res => setTimeout(res, ms));
 
-        document.addEventListener('DOMContentLoaded', async () => {
-            canvas = document.getElementById('gameCanvas');
-            ctx = canvas.getContext('2d');
+        document.addEventListener(\'DOMContentLoaded\', async () => {
+            canvas = document.getElementById(\'gameCanvas\');
+            ctx = canvas.getContext(\'2d\');
             maxWavesDisplay.textContent = MAX_WAVES;
             epsilonDisplay.textContent = epsilon.toFixed(2);
 
             statusMessageSpan.textContent = "Chargement de la bibliothèque de réseau de neurones...";
 
-            const brainScript = document.createElement('script');
+            const brainScript = document.createElement(\'script\');
             brainScript.src = "https://cdnjs.cloudflare.com/ajax/libs/brain.js/2.0.0-beta.24/browser.min.js"; // THIS LINE WILL BE REPLACED by sed
             brainScript.async = true; // Added async attribute
 
             brainScript.onload = async () => {
                 console.log("Brain.js chargé.");
-                if (typeof brain === 'undefined') {
+                if (typeof brain === \'undefined\') {
                     console.error("Brain.js n\'est pas correctement chargé sur l\'objet window.");
                     statusMessageSpan.textContent = "Erreur critique: Brain.js non trouvé.";
-                    statusMessageSpan.classList.remove('text-yellow-600');
-                    statusMessageSpan.classList.add('text-red-600');
+                    statusMessageSpan.classList.remove(\'text-yellow-600\');
+                    statusMessageSpan.classList.add(\'text-red-600\');
                     startButton.disabled = true; // Disable start if brain.js is missing
                     return;
                 }
                 await loadNeuralNetwork();
-                initGame(); // Ensure game is initialized after NN is ready
+                initGame(displayedIndividualIndex); // Initialize for the first displayed individual
 
                 startButton.disabled = false;
                 statusMessageSpan.textContent = "Prêt à commencer l\'entraînement.";
-                statusMessageSpan.classList.remove('text-yellow-600');
-                statusMessageSpan.classList.add('text-green-600');
+                statusMessageSpan.classList.remove(\'text-yellow-600\');
+                statusMessageSpan.classList.add(\'text-green-600\');
 
-                startButton.addEventListener('click', toggleTraining);
-                speedControl.addEventListener('input', (e) => {
-                    simulationSpeed = parseInt(e.target.value);
-                });
+                startButton.addEventListener(\'click\', toggleTraining);
                 // Initialize lastSquarePosition only if square is defined (after initGame)
                 if (square) {
                     lastSquarePosition = { x: square.x, y: square.y };
                 }
             };
             brainScript.onerror = () => {
-                statusMessageSpan.textContent = "Erreur de chargement de Brain.js. Vérifiez votre connexion internet. Si le problème persiste, essayez de désactiver les bloqueurs de publicités ou utilisez un autre navigateur.";
-                statusMessageSpan.classList.remove('text-yellow-600');
-                statusMessageSpan.classList.add('text-red-600');
+                statusMessageSpan.textContent = "Erreur de chargement de Brain.js. Veuillez vérifier votre connexion et réessayer.";
+                statusMessageSpan.classList.remove(\'text-yellow-600\');
+                statusMessageSpan.classList.add(\'text-red-600\');
                 console.error("Failed to load brain.js script.");
                 startButton.disabled = true; // Disable start if brain.js fails to load
             };
             document.head.appendChild(brainScript);
         });
 
-        function initGame() {
-            // square initialization should be robust
-            if (!square) {
-                square = { x: GAME_WIDTH / 2 - SQUARE_SIZE / 2, y: GAME_HEIGHT / 2 - SQUARE_SIZE / 2, size: SQUARE_SIZE, dx: 0, dy: 0 };
-            } else {
-                // Reset position for new wave/individual
-                square.x = GAME_WIDTH / 2 - SQUARE_SIZE / 2;
-                square.y = GAME_HEIGHT / 2 - SQUARE_SIZE / 2;
-                square.dx = 0;
-                square.dy = 0;
-            }
-            lastSquarePosition = { x: square.x, y: square.y };
+function generateCirclesForGeneration(count) {
+    currentGenerationCircleData = []; // Clear previous generation's circle data
+    for (let i = 0; i < count; i++) {
+        currentGenerationCircleData.push({
+            x: Math.random() * (GAME_WIDTH - CIRCLE_RADIUS * 2) + CIRCLE_RADIUS,
+            y: Math.random() * (GAME_HEIGHT - CIRCLE_RADIUS * 2) + CIRCLE_RADIUS,
+            radius: CIRCLE_RADIUS,
+            collected: false
+        });
+    }
+    console.log(\`[generateCirclesForGeneration] Generated \${currentGenerationCircleData.length} circles for the new generation.\`);
+}
 
-            if (currentGenerationCircleData && currentGenerationCircleData.length > 0) {
-                circles = JSON.parse(JSON.stringify(currentGenerationCircleData));
-            } else {
-                console.warn("currentGenerationCircleData is empty in initGame, generating new circles as fallback.");
-                circles = [];
-                generateNewRandomCircles(INITIAL_CIRCLES); // Use renamed function
-            }
-            score = 0;
-            trainingData = [];
-            // updateUI(); // Moved to startNextIndividualWave
-            draw();
-        }
+function initGame(individualIndex) {
+    // Initialize square for the specific individual
+    squares[individualIndex] = {
+        x: GAME_WIDTH / 2 - SQUARE_SIZE / 2,
+        y: GAME_HEIGHT / 2 - SQUARE_SIZE / 2,
+        size: SQUARE_SIZE,
+        dx: 0,
+        dy: 0
+    };
+    // Initialize lastSquarePositions for the individual
+    lastSquarePositions[individualIndex] = { x: squares[individualIndex].x, y: squares[individualIndex].y };
 
-        function generateCirclesForGeneration(count) {
-            currentGenerationCircleData = []; // Clear previous generation's circle data
-            for (let i = 0; i < count; i++) {
-                currentGenerationCircleData.push({
-                    x: Math.random() * (GAME_WIDTH - CIRCLE_RADIUS * 2) + CIRCLE_RADIUS,
-                    y: Math.random() * (GAME_HEIGHT - CIRCLE_RADIUS * 2) + CIRCLE_RADIUS,
-                    radius: CIRCLE_RADIUS,
-                    collected: false // This 'collected' state is for the template, each individual will get a deep copy
-                });
-            }
-            console.log(`[generateCirclesForGeneration] Generated ${currentGenerationCircleData.length} circles for the new generation.`);
-        }
+    if (currentGenerationCircleData && currentGenerationCircleData.length > 0) {
+        populationCircles[individualIndex] = JSON.parse(JSON.stringify(currentGenerationCircleData));
+    } else {
+        console.warn(\`[initGame] currentGenerationCircleData vide pour l'individu \${individualIndex}. Utilisation de nouveaux cercles.\`);
+        populationCircles[individualIndex] = [];
+        generateNewRandomCircles(INITIAL_CIRCLES, individualIndex); // generateNewRandomCircles must exist or be created
+    }
 
-        function generateNewRandomCircles(count) {
-            for (let i = 0; i < count; i++) {
-                circles.push({ // `circles` is the current individual's live set of circles
-                    x: Math.random() * (GAME_WIDTH - CIRCLE_RADIUS * 2) + CIRCLE_RADIUS,
-                    y: Math.random() * (GAME_HEIGHT - CIRCLE_RADIUS * 2) + CIRCLE_RADIUS,
-                    radius: CIRCLE_RADIUS,
-                    collected: false
-                });
-            }
-        }
+    currentWaveScores[individualIndex] = 0;
 
-        function processEndOfGeneration() {
-            // 1. Create a structure for sorting networks along with their scores and original index
-            let scoredNetworks = neuralNetworks.map((net, index) => ({
-                index: index,
-                score: individualScores[index], // individualScores should be up-to-date here
-                networkJSON: net.toJSON() // Get JSON once for efficiency
-            }));
+    if (!Array.isArray(populationTrainingData[individualIndex])) {
+         populationTrainingData[individualIndex] = [];
+    } else {
+         populationTrainingData[individualIndex].length = 0; // Clear previous data
+    }
 
-            // 2. Sort networks by score in descending order (best first)
-            scoredNetworks.sort((a, b) => b.score - a.score);
+    // Only call draw if this is the individual being displayed
+    // This draw call is important for the very first draw when the page loads and initGame is called from DOMContentLoaded.
+    // For subsequent inits (per individual in a generation), draw will be handled by the main gameLoop.
+    if (individualIndex === displayedIndividualIndex) {
+        draw();
+    }
+}
 
-            console.log(`[processEndOfGeneration] Fin de la Génération ${currentGeneration}. Scores triés (top 5):`, scoredNetworks.slice(0, 5).map(s => ({idx: s.index, score: s.score.toFixed(2)})));
+function updateIndividualGameState(individualIndex) {
+    const currentSquare = squares[individualIndex];
+    const currentCircles = populationCircles[individualIndex];
 
-            let nextGenerationJSONs = [];
+    if (!currentSquare) {
+        // console.warn(\`[updateIndividualGameState] Pas de carré pour l'individu \${individualIndex}\`);
+        return; // Skip if this individual's square is not initialized
+    }
 
-            // 3. Elitism: Carry over the best ELITISM_COUNT individuals
-            // Assuming ELITISM_COUNT is a const and set to a reasonable value, otherwise add check:
-            // if (ELITISM_COUNT > POPULATION_SIZE) { ELITISM_COUNT = POPULATION_SIZE; }
-            for (let i = 0; i < ELITISM_COUNT && i < scoredNetworks.length; i++) {
-                console.log(`[processEndOfGeneration] Elite ${i+1}: Individu original ${scoredNetworks[i].index} (Score: ${scoredNetworks[i].score.toFixed(2)})`);
-                nextGenerationJSONs.push(scoredNetworks[i].networkJSON);
-            }
+    // Apply movement (dx/dy are set by makeAIDecision for this individual)
+    // No simulationSpeed multiplier here, direct movement per step
+    currentSquare.x += currentSquare.dx;
+    currentSquare.y += currentSquare.dy;
 
-            // Placeholder for Crossover and Mutation
-            let childrenNeeded = POPULATION_SIZE - nextGenerationJSONs.length;
-            if (scoredNetworks.length === 0 && childrenNeeded > 0) {
-                console.error("[processEndOfGeneration] CRITICAL: scoredNetworks is empty, cannot create children. Training may fail.");
-                // This state should ideally not be reached if POPULATION_SIZE > 0
-            } else if (scoredNetworks.length > 0) { // Ensure there's at least one network to copy from
-                for (let i = 0; i < childrenNeeded; i++) {
-                    // Simple placeholder: copy the best one (or cycle through top elites for variety)
-                    const parentJson = scoredNetworks[i % Math.min(ELITISM_COUNT, scoredNetworks.length)] ? scoredNetworks[i % Math.min(ELITISM_COUNT, scoredNetworks.length)].networkJSON : scoredNetworks[0].networkJSON;
-                    const childJson = JSON.parse(JSON.stringify(parentJson));
-                    nextGenerationJSONs.push(childJson);
-                }
-            } else {
-                 // If scoredNetworks is empty and children are needed, this is a problem.
-                 // For now, just log, the population will be smaller or empty.
-                 console.error("[processEndOfGeneration] Cannot create children as no scored networks are available.");
-            }
+    // Wall collisions
+    if (currentSquare.x < 0) currentSquare.x = 0;
+    if (currentSquare.x + currentSquare.size > GAME_WIDTH) currentSquare.x = GAME_WIDTH - currentSquare.size;
+    if (currentSquare.y < 0) currentSquare.y = 0;
+    if (currentSquare.y + currentSquare.size > GAME_HEIGHT) currentSquare.y = GAME_HEIGHT - currentSquare.size;
 
-            console.log(`[processEndOfGeneration] Application de la mutation aux ${POPULATION_SIZE - ELITISM_COUNT} enfants potentiels.`);
-            for (let i = ELITISM_COUNT; i < nextGenerationJSONs.length; i++) {
-                if (nextGenerationJSONs[i]) { // Ensure the JSON exists
-                    // console.log(`[processEndOfGeneration] Mutation de l'enfant ${i - ELITISM_COUNT + 1} (index ${i} dans nextGenerationJSONs).`);
-                    nextGenerationJSONs[i] = mutate(nextGenerationJSONs[i], MUTATION_RATE, MUTATION_AMOUNT);
-                } else {
-                    console.warn(`[processEndOfGeneration] Tentative de mutation sur un JSON non défini à l'index ${i} de nextGenerationJSONs.`);
+    // Circle collection
+    let collectedAny = false;
+    if (currentCircles) { // Check if currentCircles is initialized
+        for (let i = currentCircles.length - 1; i >= 0; i--) {
+            const circle = currentCircles[i];
+            if (!circle.collected) {
+                const dist = Math.sqrt(
+                    Math.pow(currentSquare.x + currentSquare.size / 2 - circle.x, 2) +
+                    Math.pow(currentSquare.y + currentSquare.size / 2 - circle.y, 2)
+                );
+                if (dist < (currentSquare.size / 2 + circle.radius)) {
+                    circle.collected = true;
+                    currentWaveScores[individualIndex] += REWARD_COLLECT_CIRCLE;
+                    currentCircles.splice(i, 1);
+                    collectedAny = true;
                 }
             }
-
-            // Create new Brain.js instances from the nextGenerationJSONs
-            const newNeuralNetworks = []; // Temporary array for the new generation
-            for (let i = 0; i < nextGenerationJSONs.length; i++) {
-                const net = new window.brain.NeuralNetwork().fromJSON(nextGenerationJSONs[i]);
-                net.colorDisplay = individualColors[i % individualColors.length];
-                newNeuralNetworks.push(net);
-            }
-            neuralNetworks = newNeuralNetworks; // Assign the new generation
-
-            if (neuralNetworks.length !== POPULATION_SIZE && childrenNeeded > 0 && scoredNetworks.length === 0) {
-                 console.warn(`[processEndOfGeneration] Population size is ${neuralNetworks.length} due to inability to create children from empty scoredNetworks.`);
-            } else if (neuralNetworks.length !== POPULATION_SIZE) {
-                 console.error(`[processEndOfGeneration] Population size mismatch! Expected ${POPULATION_SIZE}, got ${neuralNetworks.length}.`);
-            }
-
-            savePopulation(); // Save all networks at the end of a full generation
-
-            currentGeneration++;
-            currentIndividualIndex = 0; // Reset for next generation
-
-            // MAX_WAVES is now effectively MAX_GENERATIONS
-            if (currentGeneration > MAX_WAVES) {
-                console.log("Nombre maximum de générations atteint.");
-                endTrainingSession(); // Call the renamed endTraining
-                return;
-            }
-
-            if (isTraining) {
-                // Decay epsilon per generation (or other strategy)
-                if (MAX_WAVES > 1) {
-                     epsilon = Math.max(finalEpsilon, initialEpsilon - (initialEpsilon - finalEpsilon) * ((currentGeneration -1) / (MAX_WAVES-1)));
-                } else {
-                    epsilon = finalEpsilon;
-                }
-                console.log(`[processEndOfGeneration] Nouvelle valeur d'epsilon pour Gén. ${currentGeneration}: ${epsilon.toFixed(2)}`);
-                startNextIndividualWave(); // Start the next generation
-            }
         }
+    } else {
+        // console.warn(\`[updateIndividualGameState] Cercles non initialisés pour l'individu \${individualIndex}\`);
+    }
 
-        function processEndOfIndividualWave() {
-            currentIndividualIndex++;
-            if (currentIndividualIndex < POPULATION_SIZE) {
-                startNextIndividualWave();
-            } else {
-                processEndOfGeneration();
+    if (collectedAny) {
+        const currentCircleCount = currentCircles ? currentCircles.length : 0;
+        const circlesToGenerate = INITIAL_CIRCLES - currentCircleCount;
+        // Generate at least 1 if list becomes empty, or up to INITIAL_CIRCLES
+        generateNewRandomCircles(circlesToGenerate > 0 ? circlesToGenerate : (currentCircleCount === 0 ? INITIAL_CIRCLES : 1), individualIndex);
+    }
+
+    // Update lastSquarePositions AFTER all movements and logic for this step
+    // This state S(t+1) will be used as S(t-1) for the S(t) in the next makeAIDecision's calculateReward
+    if (lastSquarePositions) { // Ensure lastSquarePositions itself is initialized
+        lastSquarePositions[individualIndex] = { x: currentSquare.x, y: currentSquare.y };
+    } else {
+        // console.error("[updateIndividualGameState] lastSquarePositions array is not initialized.");
+    }
+}
+
+function generateNewRandomCircles(count, individualIndex) {
+    if (individualIndex === undefined) {
+        console.error("[generateNewRandomCircles] individualIndex is undefined. Cannot add circles.");
+        return;
+    }
+    if (!populationCircles[individualIndex]) {
+        // This might happen if initGame wasn't called for this individual yet,
+        // though ideally it should be.
+        console.warn(\`[generateNewRandomCircles] populationCircles[\${individualIndex}] non initialisé. Création.\`);
+        populationCircles[individualIndex] = [];
+    }
+    for (let i = 0; i < count; i++) {
+        populationCircles[individualIndex].push({
+            x: Math.random() * (GAME_WIDTH - CIRCLE_RADIUS * 2) + CIRCLE_RADIUS,
+            y: Math.random() * (GAME_HEIGHT - CIRCLE_RADIUS * 2) + CIRCLE_RADIUS,
+            radius: CIRCLE_RADIUS,
+            collected: false
+        });
+    }
+}
+
+function draw() {
+    if (!ctx) return;
+    ctx.clearRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+
+    // Ensure displayedIndividualIndex is valid
+    if (displayedIndividualIndex < 0 || displayedIndividualIndex >= POPULATION_SIZE) {
+        // console.warn(\`[draw] displayedIndividualIndex (\${displayedIndividualIndex}) hors limites.\`);
+        // Potentially draw a "no data" state or simply return
+        return;
+    }
+
+    const currentSquareToDraw = squares[displayedIndividualIndex];
+    const currentCirclesToDraw = populationCircles[displayedIndividualIndex];
+
+    if (!currentSquareToDraw) {
+        // This can happen if initGame hasn't run yet for this specific displayedIndividualIndex after a population reset
+        // console.log(\`[draw] Pas de carré à dessiner pour l'individu \${displayedIndividualIndex}\`);
+        return;
+    }
+
+    // Set fillStyle based on the displayed individual's network color
+    if (neuralNetworks && neuralNetworks[displayedIndividualIndex] && neuralNetworks[displayedIndividualIndex].colorDisplay) {
+        ctx.fillStyle = neuralNetworks[displayedIndividualIndex].colorDisplay;
+    } else {
+        ctx.fillStyle = 'rgba(59, 130, 246, 0.9)'; // Fallback color
+    }
+    ctx.fillRect(currentSquareToDraw.x, currentSquareToDraw.y, currentSquareToDraw.size, currentSquareToDraw.size);
+    ctx.strokeStyle = '#2563eb';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(currentSquareToDraw.x, currentSquareToDraw.y, currentSquareToDraw.size, currentSquareToDraw.size);
+
+    if (currentCirclesToDraw) {
+        currentCirclesToDraw.forEach(circle => {
+            if (!circle.collected) {
+                ctx.beginPath();
+                ctx.arc(circle.x, circle.y, circle.radius, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(16, 185, 129, 0.9)'; // Circle color can be constant
+                ctx.fill();
+                ctx.strokeStyle = '#047857';
+                ctx.lineWidth = 2;
+                ctx.stroke();
             }
-        }
+        });
+    }
+}
 
-        function draw() {
-            if (!ctx) return; // Ensure ctx is available
-            ctx.clearRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+function gameLoop() {
+    draw(); // Only responsible for drawing the state of displayedIndividualIndex
+    gameLoopId = requestAnimationFrame(gameLoop);
+}
 
-            if (!square) return; // Ensure square is initialized
+function getNNInputs(individualIndex) {
+    const currentSquare = squares[individualIndex];
+    const currentCircles = populationCircles[individualIndex];
 
-            if (neuralNetworks[currentIndividualIndex] && neuralNetworks[currentIndividualIndex].colorDisplay) {
-                ctx.fillStyle = neuralNetworks[currentIndividualIndex].colorDisplay;
-            } else {
-                ctx.fillStyle = 'rgba(59, 130, 246, 0.9)'; // Fallback color
-            }
-            ctx.fillRect(square.x, square.y, square.size, square.size);
-            ctx.strokeStyle = '#2563eb';
-            ctx.lineWidth = 2;
-            ctx.strokeRect(square.x, square.y, square.size, square.size);
+    if (!currentSquare) {
+        // console.warn(\`[getNNInputs] Carré non défini pour l'individu \${individualIndex}\`);
+        return {
+            squareX: 0.5, squareY: 0.5, closestCircleX: 0.5, closestCircleY: 0.5,
+            distanceToClosestCircle: 1, distanceToLeftWall: 0.5, distanceToRightWall: 0.5,
+            distanceToTopWall: 0.5, distanceToBottomWall: 0.5,
+        };
+    }
+    const normalizedSquareX = currentSquare.x / GAME_WIDTH;
+    const normalizedSquareY = currentSquare.y / GAME_HEIGHT;
 
-            circles.forEach(circle => {
-                if (!circle.collected) {
-                    ctx.beginPath();
-                    ctx.arc(circle.x, circle.y, circle.radius, 0, Math.PI * 2);
-                    ctx.fillStyle = 'rgba(16, 185, 129, 0.9)';
-                    ctx.fill();
-                    ctx.strokeStyle = '#047857';
-                    ctx.lineWidth = 2;
-                    ctx.stroke();
-                }
-            });
-        }
+    let closestCircle = null;
+    let minDistance = Infinity;
 
-        function gameLoop() {
-            if (!isTraining || !square) return;
-
-            square.x += square.dx * simulationSpeed;
-            square.y += square.dy * simulationSpeed;
-
-            if (square.x < 0) square.x = 0;
-            if (square.x + square.size > GAME_WIDTH) square.x = GAME_WIDTH - square.size;
-            if (square.y < 0) square.y = 0;
-            if (square.y + square.size > GAME_HEIGHT) square.y = GAME_HEIGHT - square.size;
-
-            let collectedAny = false;
-            for (let i = circles.length - 1; i >= 0; i--) { // Iterate backwards for safe splicing
-                const circle = circles[i];
-                if (!circle.collected) {
-                    const dist = Math.sqrt(
-                        Math.pow(square.x + square.size / 2 - circle.x, 2) +
-                        Math.pow(square.y + square.size / 2 - circle.y, 2)
-                    );
-                    if (dist < (square.size / 2 + circle.radius)) {
-                        circle.collected = true;
-                        score += REWARD_COLLECT_CIRCLE;
-                        circles.splice(i, 1); // Remove collected circle
-                        collectedAny = true;
-                    }
-                }
-            }
-            if(collectedAny){
-                 generateNewRandomCircles(circles.length > 0 ? 1: INITIAL_CIRCLES - circles.length); // Replace collected or refill if empty
-                 updateUI();
-            }
-
-
-            draw();
-            gameLoopId = requestAnimationFrame(gameLoop);
-        }
-
-        function getNNInputs() {
-            if (!square) { // Handle case where square might not be initialized
-                return { // Return default/neutral inputs
-                    squareX: 0.5, squareY: 0.5,
-                    closestCircleX: 0.5, closestCircleY: 0.5,
-                    distanceToClosestCircle: 1,
-                    distanceToLeftWall: 0.5, distanceToRightWall: 0.5,
-                    distanceToTopWall: 0.5, distanceToBottomWall: 0.5,
-                };
-            }
-            const normalizedSquareX = square.x / GAME_WIDTH;
-            const normalizedSquareY = square.y / GAME_HEIGHT;
-
-            let closestCircle = null;
-            let minDistance = Infinity;
-
-            circles.forEach(circle => {
-                if (!circle.collected) {
-                    const dist = Math.sqrt(
-                        Math.pow(square.x - circle.x, 2) +
-                        Math.pow(square.y - circle.y, 2)
-                    );
-                    if (dist < minDistance) {
-                        minDistance = dist;
-                        closestCircle = circle;
-                    }
-                }
-            });
-
-            let normalizedClosestCircleX = 0.5;
-            let normalizedClosestCircleY = 0.5;
-            let normalizedDistanceToClosestCircle = 1;
-
-            if (closestCircle) {
-                normalizedClosestCircleX = closestCircle.x / GAME_WIDTH;
-                normalizedClosestCircleY = closestCircle.y / GAME_HEIGHT;
-                normalizedDistanceToClosestCircle = minDistance / Math.sqrt(GAME_WIDTH * GAME_WIDTH + GAME_HEIGHT * GAME_HEIGHT);
-            }
-
-            return {
-                squareX: normalizedSquareX,
-                squareY: normalizedSquareY,
-                closestCircleX: normalizedClosestCircleX,
-                closestCircleY: normalizedClosestCircleY,
-                distanceToClosestCircle: normalizedDistanceToClosestCircle,
-                distanceToLeftWall: square.x / GAME_WIDTH,
-                distanceToRightWall: (GAME_WIDTH - (square.x + square.size)) / GAME_WIDTH,
-                distanceToTopWall: square.y / GAME_HEIGHT,
-                distanceToBottomWall: (GAME_HEIGHT - (square.y + square.size)) / GAME_HEIGHT,
-            };
-        }
-
-        function makeAIDecision() {
-            aiDecisionCounter++;
-            if (!isTraining || !square) return;
-
-            // Ensure currentIndividualIndex is valid and the network exists
-            if (currentIndividualIndex < 0 || currentIndividualIndex >= neuralNetworks.length || !neuralNetworks[currentIndividualIndex] || typeof neuralNetworks[currentIndividualIndex].run !== 'function') {
-                console.error(`[makeAIDecision] Réseau pour l'individu ${currentIndividualIndex} non prêt ou invalide.`);
-                return;
-            }
-
-            const inputs = getNNInputs();
-            const outputFromNN = neuralNetworks[currentIndividualIndex].run(inputs);
-
-            let chosenAction;
-
-            if (Math.random() < epsilon) {
-                chosenAction = OUTPUT_ACTIONS[Math.floor(Math.random() * OUTPUT_ACTIONS.length)];
-            } else {
-                let bestNNAction = 'idle';
-                let maxOutput = -Infinity;
-                for (const actionName of OUTPUT_ACTIONS) {
-                    if (outputFromNN[actionName] > maxOutput) {
-                        maxOutput = outputFromNN[actionName];
-                        bestNNAction = actionName;
-                    }
-                }
-                chosenAction = bestNNAction;
-            }
-
-            const moveSpeed = 5;
-            square.dx = 0;
-            square.dy = 0;
-
-            switch (chosenAction) {
-                case 'up': square.dy = -moveSpeed; break;
-                case 'down': square.dy = moveSpeed; break;
-                case 'left': square.dx = -moveSpeed; break;
-                case 'right': square.dx = moveSpeed; break;
-                case 'idle': break;
-            }
-
-            const reward = calculateReward(chosenAction, inputs);
-            score += reward;
-
-            const outputForTraining = {};
-            OUTPUT_ACTIONS.forEach(action => outputForTraining[action] = 0);
-            outputForTraining[chosenAction] = 1;
-
-            trainingData.push({ input: inputs, output: outputForTraining });
-
-            lastSquarePosition = { x: square.x, y: square.y };
-            updateUI();
-        }
-
-        function calculateReward(action, inputs) {
-            let reward = 0;
-            const currentDistanceToCircle = inputs.distanceToClosestCircle;
-
-            const closestCircleX = inputs.closestCircleX * GAME_WIDTH;
-            const closestCircleY = inputs.closestCircleY * GAME_HEIGHT;
-
-            if (!lastSquarePosition) return 0; // Guard if lastSquarePosition isn't set
-
-            const prevStepDistanceToCurrentCircle = Math.sqrt(
-                Math.pow(lastSquarePosition.x - closestCircleX, 2) +
-                Math.pow(lastSquarePosition.y - closestCircleY, 2)
-            ) / Math.sqrt(GAME_WIDTH * GAME_WIDTH + GAME_HEIGHT * GAME_HEIGHT);
-
-            if (currentDistanceToCircle < prevStepDistanceToCurrentCircle) {
-                reward += REWARD_MOVE_TOWARDS_CIRCLE;
-            } else if (currentDistanceToCircle > prevStepDistanceToCurrentCircle && inputs.distanceToClosestCircle < 1) {
-                reward -= REWARD_MOVE_TOWARDS_CIRCLE * 0.5;
-            }
-
-            if (action === 'idle') {
-                reward += PENALTY_IDLE;
-            }
-
-            if (inputs.distanceToLeftWall <= 0.01 || inputs.distanceToRightWall <= 0.01 ||
-                inputs.distanceToTopWall <= 0.01 || inputs.distanceToBottomWall <= 0.01) {
-                if ((action === 'left' && inputs.distanceToLeftWall <= 0.01) ||
-                    (action === 'right' && inputs.distanceToRightWall <= 0.01) ||
-                    (action === 'up' && inputs.distanceToTopWall <= 0.01) ||
-                    (action === 'down' && inputs.distanceToBottomWall <= 0.01)) {
-                     reward += PENALTY_WALL_COLLISION;
-                } else if (square && (square.x <=0 || square.x + square.size >= GAME_WIDTH || square.y <=0 || square.y + square.size >= GAME_HEIGHT)){
-                     reward += PENALTY_WALL_COLLISION * 0.5;
+    if (currentCircles) {
+        currentCircles.forEach(circle => {
+            if (!circle.collected) {
+                const dist = Math.sqrt(
+                    Math.pow(currentSquare.x - circle.x, 2) + // Use currentSquare.x, not square.x
+                    Math.pow(currentSquare.y - circle.y, 2)  // Use currentSquare.y, not square.y
+                );
+                if (dist < minDistance) {
+                    minDistance = dist;
+                    closestCircle = circle;
                 }
             }
-            return reward;
+        });
+    }
+
+    let normalizedClosestCircleX = 0.5;
+    let normalizedClosestCircleY = 0.5;
+    let normalizedDistanceToClosestCircle = 1;
+
+    if (closestCircle) {
+        normalizedClosestCircleX = closestCircle.x / GAME_WIDTH;
+        normalizedClosestCircleY = closestCircle.y / GAME_HEIGHT;
+        normalizedDistanceToClosestCircle = minDistance / Math.sqrt(GAME_WIDTH * GAME_WIDTH + GAME_HEIGHT * GAME_HEIGHT);
+    }
+
+    return {
+        squareX: normalizedSquareX,
+        squareY: normalizedSquareY,
+        closestCircleX: normalizedClosestCircleX,
+        closestCircleY: normalizedClosestCircleY,
+        distanceToClosestCircle: normalizedDistanceToClosestCircle,
+        distanceToLeftWall: currentSquare.x / GAME_WIDTH,
+        distanceToRightWall: (GAME_WIDTH - (currentSquare.x + currentSquare.size)) / GAME_WIDTH,
+        distanceToTopWall: currentSquare.y / GAME_HEIGHT,
+        distanceToBottomWall: (GAME_HEIGHT - (currentSquare.y + currentSquare.size)) / GAME_HEIGHT,
+    };
+}
+
+function makeAIDecision(individualIndex) {
+    // aiDecisionCounter is global and reset elsewhere before a generation evaluation starts
+    // For per-individual step counting if needed, a local var or array would be used.
+    // aiDecisionCounter++; // This global counter will now count total decisions across all individuals in a step.
+    // Let's assume aiDecisionCounter is for the whole generation step process.
+
+    const currentIndNetwork = neuralNetworks[individualIndex];
+    const currentIndSquare = squares[individualIndex];
+
+    if (!currentIndNetwork || !currentIndSquare) {
+        // console.warn(\`[makeAIDecision] Réseau ou carré non défini pour l'individu \${individualIndex}\`);
+        return;
+    }
+    if (typeof currentIndNetwork.run !== 'function') {
+        console.error(\`Le réseau de neurones pour l'individu \${individualIndex} n'est pas prêt (pas de fonction 'run').\`);
+        return;
+    }
+
+    const inputs = getNNInputs(individualIndex); // Uses individual's current state
+    const outputFromNN = currentIndNetwork.run(inputs);
+
+    let chosenAction;
+    if (Math.random() < epsilon) {
+        chosenAction = OUTPUT_ACTIONS[Math.floor(Math.random() * OUTPUT_ACTIONS.length)];
+    } else {
+        let bestNNAction = 'idle';
+        let maxOutput = -Infinity;
+        for (const actionName of OUTPUT_ACTIONS) {
+            if (outputFromNN[actionName] > maxOutput) {
+                maxOutput = outputFromNN[actionName];
+                bestNNAction = actionName;
+            }
         }
+        chosenAction = bestNNAction;
+    }
+
+    const moveSpeed = 5;
+    currentIndSquare.dx = 0;
+    currentIndSquare.dy = 0;
+
+    switch (chosenAction) {
+        case 'up': currentIndSquare.dy = -moveSpeed; break;
+        case 'down': currentIndSquare.dy = moveSpeed; break;
+        case 'left': currentIndSquare.dx = -moveSpeed; break;
+        case 'right': currentIndSquare.dx = moveSpeed; break;
+        case 'idle': break;
+    }
+
+    // Reward is calculated based on the action taken from the current state (inputs)
+    // and the previous state (lastSquarePositions[individualIndex])
+    const reward = calculateReward(chosenAction, inputs, individualIndex);
+    currentWaveScores[individualIndex] += reward;
+
+    const outputForTraining = {};
+    OUTPUT_ACTIONS.forEach(action => outputForTraining[action] = 0);
+    outputForTraining[chosenAction] = 1;
+
+    if (!Array.isArray(populationTrainingData[individualIndex])) {
+         console.warn(\`[makeAIDecision] populationTrainingData[\${individualIndex}] non initialisé correctement.\`);
+         populationTrainingData[individualIndex] = [];
+    }
+    populationTrainingData[individualIndex].push({ input: inputs, output: outputForTraining });
+
+    // lastSquarePositions[individualIndex] is NOT updated here.
+    // It's updated in updateIndividualGameState AFTER the move is applied.
+    // This ensures calculateReward in the NEXT call to makeAIDecision for this individual
+    // uses the state *before* that next decision's move.
+}
+
+function calculateReward(action, inputs, individualIndex) {
+    let reward = 0;
+    const currentDistanceToCircle = inputs.distanceToClosestCircle;
+    const currentIndSquare = squares[individualIndex];
+    const currentIndLastSquarePos = lastSquarePositions[individualIndex];
+
+    const closestCircleX = inputs.closestCircleX * GAME_WIDTH;
+    const closestCircleY = inputs.closestCircleY * GAME_HEIGHT;
+
+    if (!currentIndLastSquarePos) {
+        // console.warn(\`[calculateReward] lastSquarePositions[\${individualIndex}] non défini.\`);
+        return 0;
+    }
+    if (!currentIndSquare) { // Should not happen if logic flows correctly
+        // console.warn(\`[calculateReward] squares[\${individualIndex}] non défini.\`);
+        return PENALTY_IDLE; // Penalize if square somehow vanished
+    }
+
+    const prevStepDistanceToCurrentCircle = Math.sqrt(
+        Math.pow(currentIndLastSquarePos.x - closestCircleX, 2) +
+        Math.pow(currentIndLastSquarePos.y - closestCircleY, 2)
+    ) / Math.sqrt(GAME_WIDTH * GAME_WIDTH + GAME_HEIGHT * GAME_HEIGHT);
+
+    if (currentDistanceToCircle < prevStepDistanceToCurrentCircle) {
+        reward += REWARD_MOVE_TOWARDS_CIRCLE;
+    } else if (currentDistanceToCircle > prevStepDistanceToCurrentCircle && inputs.distanceToClosestCircle < 1) {
+        reward -= REWARD_MOVE_TOWARDS_CIRCLE * 0.5;
+    }
+
+    if (action === 'idle') {
+        reward += PENALTY_IDLE;
+    }
+
+    if (inputs.distanceToLeftWall <= 0.01 || inputs.distanceToRightWall <= 0.01 ||
+        inputs.distanceToTopWall <= 0.01 || inputs.distanceToBottomWall <= 0.01) {
+        if ((action === 'left' && inputs.distanceToLeftWall <= 0.01) ||
+            (action === 'right' && inputs.distanceToRightWall <= 0.01) ||
+            (action === 'up' && inputs.distanceToTopWall <= 0.01) ||
+            (action === 'down' && inputs.distanceToBottomWall <= 0.01)) {
+             reward += PENALTY_WALL_COLLISION;
+        } else if (currentIndSquare.x <=0 || currentIndSquare.x + currentIndSquare.size >= GAME_WIDTH ||
+                   currentIndSquare.y <=0 || currentIndSquare.y + currentIndSquare.size >= GAME_HEIGHT){
+             reward += PENALTY_WALL_COLLISION * 0.5;
+        }
+    }
+    return reward;
+}
+
+function runGenerationEvaluationStep() {
+    if (!isTraining) {
+        console.log("[runGenerationEvaluationStep] Entraînement arrêté.");
+        return;
+    }
+
+    // Perform one step of decision and game state update for all individuals
+    for (let i = 0; i < POPULATION_SIZE; i++) {
+        makeAIDecision(i);          // AI decides action, updates its dx/dy, calculates reward, stores training data
+        updateIndividualGameState(i); // Game state updates based on action, handles collisions, circles, updates lastSquarePosition
+    }
+
+    currentStepInGeneration++;
+
+    // Update UI (e.g., score of the displayed individual might have changed)
+    // updateUI() is relatively light as it only updates DOM text content.
+    if (currentStepInGeneration % 20 === 0) { // Update UI less frequently to avoid too many DOM updates per step cycle
+        updateUI();
+    }
+
+
+    if (currentStepInGeneration < STEPS_PER_GENERATION_EVALUATION) {
+        // Continue to the next step of the current generation's evaluation
+        setTimeout(runGenerationEvaluationStep, 0); // Yield to browser
+    } else {
+        // All steps for the current generation's evaluation are done
+        console.log(\`[runGenerationEvaluationStep] Fin des \${STEPS_PER_GENERATION_EVALUATION} étapes pour la Gén. \${currentGeneration}.\`);
+        updateUI(); // Final UI update for the generation before processing
+        processEndOfGenerationEvaluation(); // Proceed to train, select, crossover, mutate
+    }
+}
 
         function toggleTraining() {
             if (isTraining) {
@@ -567,393 +577,498 @@
             }
         }
 
-        function startTraining() {
-            if (isTraining) return;
-            if (neuralNetworks.length === 0) {
-                statusMessageSpan.textContent = "Erreur: Population de réseaux non initialisée.";
-                console.error("Cannot start training, neural networks not available or empty.");
-                return;
+function startTraining() {
+    if (isTraining) {
+        console.log("[startTraining] L'entraînement est déjà en cours.");
+        return;
+    }
+    if (!neuralNetworks || neuralNetworks.length !== POPULATION_SIZE) {
+        statusMessageSpan.textContent = "Erreur: Population de réseaux non (entièrement) initialisée.";
+        console.error("[startTraining] Impossible de démarrer l'entraînement, la population de réseaux n'est pas prête.");
+        if(startButton) startButton.disabled = true;
+        return;
+    }
+
+    isTraining = true;
+    if(startButton) {
+        startButton.textContent = "Arrêter l'entraînement";
+        startButton.classList.remove('bg-green-600', 'hover:bg-green-700');
+        startButton.classList.add('bg-red-600', 'hover:bg-red-700');
+    }
+
+    currentGeneration = 1;
+    displayedIndividualIndex = 0;
+
+    individualScores = new Array(POPULATION_SIZE).fill(0);
+    currentWaveScores = new Array(POPULATION_SIZE).fill(0);
+    populationTrainingData = new Array(POPULATION_SIZE);
+    for (let i = 0; i < POPULATION_SIZE; i++) {
+        populationTrainingData[i] = [];
+    }
+    // lastSquarePositions will be initialized by initGame
+
+    console.log(\`[startTraining] Début de l'entraînement. Génération \${currentGeneration}.\`);
+    if(statusMessageSpan) {
+        statusMessageSpan.textContent = \`Initialisation Gén. \${currentGeneration}...\`;
+        statusMessageSpan.classList.remove('text-yellow-600', 'text-green-600', 'text-purple-600');
+        statusMessageSpan.classList.add('text-blue-600');
+    }
+
+    generateCirclesForGeneration(INITIAL_CIRCLES);
+
+    for (let i = 0; i < POPULATION_SIZE; i++) {
+        initGame(i);
+    }
+
+    currentStepInGeneration = 0;
+
+    epsilon = initialEpsilon; // Reset epsilon
+    if(epsilonDisplay) epsilonDisplay.textContent = epsilon.toFixed(2);
+
+    updateUI();
+
+    // Ensure the rendering loop is running
+    if (typeof gameLoopId !== 'undefined' && gameLoopId !== null) {
+        cancelAnimationFrame(gameLoopId);
+    }
+    gameLoopId = requestAnimationFrame(gameLoop);
+
+    console.log("[startTraining] Lancement de runGenerationEvaluationStep...");
+    runGenerationEvaluationStep();
+}
+
+function stopTraining() { // Called when user manually stops
+    isTraining = false;
+    if(startButton) {
+        startButton.textContent = "Lancer l'entraînement";
+        startButton.classList.remove('bg-red-600', 'hover:bg-red-700');
+        startButton.classList.add('bg-green-600', 'hover:bg-green-700');
+    }
+    if(statusMessageSpan) {
+        statusMessageSpan.textContent = "Arrêté par l'utilisateur.";
+        statusMessageSpan.classList.remove('text-blue-600', 'text-green-600', 'text-purple-600');
+        statusMessageSpan.classList.add('text-yellow-600');
+    }
+    console.log("[stopTraining] Entraînement arrêté manuellement par l'utilisateur.");
+    updateUI(); // Reflect score and generation state at stop
+    // gameLoopId is managed by startTraining/stopTraining. No need to cancel here if startTraining handles it.
+    // The runGenerationEvaluationStep loop will terminate because isTraining is false.
+}
+
+// Removed startNextWave() as it's obsolete.
+
+async function processEndOfGenerationEvaluation() {
+    console.log(\`[processEndOfGenEval] Fin évaluation Gén. \${currentGeneration}. Entraînement des réseaux...\`);
+    if(statusMessageSpan) statusMessageSpan.textContent = \`Gén. \${currentGeneration} terminée. Entraînement IA...\`;
+
+    isTraining = false; // Pause the runGenerationEvaluationStep loop by its check
+
+    // 1. Train each network and collect final scores
+    for (let i = 0; i < POPULATION_SIZE; i++) {
+        const network = neuralNetworks[i];
+        const trainingSet = populationTrainingData[i];
+
+        if (trainingSet && trainingSet.length > 0 && network && typeof network.train === 'function') {
+            try {
+                // console.log(\`[processEndOfGenEval] Entraînement Ind. \${i} avec \${trainingSet.length} points.\`);
+                await network.train(trainingSet, {
+                    iterations: 50,
+                    errorThresh: 0.05,
+                    log: false,
+                    learningRate: 0.1, // These are example training opts, can be tuned
+                    timeout: 500 // Shorter timeout for individual training within a generation
+                });
+            } catch (e) {
+                console.error(\`Erreur entraînement Ind. \${i} Gén. \${currentGeneration}:\`, e);
             }
-
-            isTraining = true;
-            startButton.textContent = "Arrêter l'entraînement";
-            startButton.classList.remove('bg-green-600', 'hover:bg-green-700');
-            startButton.classList.add('bg-red-600', 'hover:bg-red-700');
-
-            currentGeneration = 1; // Reset generation counter
-            currentIndividualIndex = 0; // Start with the first individual
-            individualScores = new Array(POPULATION_SIZE).fill(0); // Reset scores for the new training session
-
-            console.log("Début de l'entraînement avec une population de " + POPULATION_SIZE + " individus.");
-            statusMessageSpan.textContent = "Initialisation de l'entraînement...";
-
-            // Initial calculation of wave/AI timings based on current speed control value
-            const sVStart = parseInt(speedControl.value);
-            currentRealWaveDuration = BASE_WAVE_DURATION / sVStart;
-            let desiredIntervalStart = currentRealWaveDuration / TARGET_AI_ITERATIONS;
-            currentAiDecisionInterval = Math.max(desiredIntervalStart, MIN_AI_DECISION_INTERVAL);
-            console.log(`[startTraining] speedValue: ${sVStart}, realWaveDuration: ${currentRealWaveDuration}, aiInterval: ${currentAiDecisionInterval}`);
-
-            startNextIndividualWave(); // Start with the first individual of the first generation
-
-            if (gameLoopId) cancelAnimationFrame(gameLoopId);
-            gameLoopId = requestAnimationFrame(gameLoop);
         }
+        individualScores[i] = currentWaveScores[i];
+    }
+    console.log(\`[processEndOfGenEval] Scores finaux Gén. \${currentGeneration}: [\${individualScores.map(s => s.toFixed(2)).join(', ')}]\`);
 
-        function stopTraining() {
-            if (isTraining) {
-                console.log(`[stopTraining] Entraînement arrêté pendant Gén. ${currentGeneration}, Ind. ${currentIndividualIndex + 1}. Décisions IA (partiel): ${aiDecisionCounter}`);
+    // 2. Genetic Algorithm
+    let scoredNetworks = neuralNetworks.map((net, index) => ({
+        index: index,
+        score: individualScores[index],
+        networkJSON: net.toJSON()
+    }));
+    scoredNetworks.sort((a, b) => b.score - a.score);
+
+    console.log("[processEndOfGenEval] Top 5 individus (index original, score):",
+                scoredNetworks.slice(0, 5).map(s => ({idx: s.index, score: s.score.toFixed(2)})));
+
+    let nextGenerationJSONs = [];
+    // Elitism
+    for (let i = 0; i < ELITISM_COUNT && i < scoredNetworks.length; i++) {
+        // console.log(\`[processEndOfGenEval] Élite \${i+1}: Ind. original \${scoredNetworks[i].index} (Score: \${scoredNetworks[i].score.toFixed(2)})\`);
+        nextGenerationJSONs.push(scoredNetworks[i].networkJSON);
+    }
+
+    // Crossover & Mutation for the rest
+    let childrenNeeded = POPULATION_SIZE - nextGenerationJSONs.length;
+    if (scoredNetworks.length > 0 && childrenNeeded > 0) {
+        const bestParentJSON = scoredNetworks[0].networkJSON;
+        for (let i = 0; i < childrenNeeded; i++) {
+            let parent2Index = (i % (Math.min(4, scoredNetworks.length - 1))) + 1;
+            if (parent2Index >= scoredNetworks.length || parent2Index === 0) {
+                 parent2Index = (scoredNetworks.length > 1) ? 1 : 0;
             }
-            isTraining = false;
-            startButton.textContent = "Lancer l'entraînement";
-            startButton.classList.remove('bg-red-600', 'hover:bg-red-700');
-            startButton.classList.add('bg-green-600', 'hover:bg-green-700');
-            statusMessageSpan.textContent = "Arrêté";
-            statusMessageSpan.classList.remove('text-blue-600', 'text-green-600', 'text-purple-600');
-            statusMessageSpan.classList.add('text-yellow-600');
+            if (scoredNetworks.length > 1 && parent2Index === 0 && scoredNetworks[0].index === scoredNetworks[parent2Index].index ) parent2Index = 1; // Ensure different parent if possible
 
-            if (gameLoopId) cancelAnimationFrame(gameLoopId);
-            if (aiDecisionIntervalId) clearInterval(aiDecisionIntervalId);
-            if (waveTimerId) clearTimeout(waveTimerId);
-            console.log("Entraînement arrêté par l'utilisateur.");
-            updateUI();
-        }
-
-        function startNextIndividualWave() {
-            if (!isTraining) return;
-
-            if (currentIndividualIndex === 0) { // Beginning of a new generation
-                console.log(`[startNextIndividualWave] Début de la Génération ${currentGeneration}`);
-                generateCirclesForGeneration(INITIAL_CIRCLES);
-                // Later: reproduction/mutation logic would go here
-            }
-
-            console.log(`[startNextIndividualWave] Individu ${currentIndividualIndex + 1}/${POPULATION_SIZE}, Génération ${currentGeneration}`);
-            statusMessageSpan.textContent = `Gén. ${currentGeneration}, Ind. ${currentIndividualIndex + 1}/${POPULATION_SIZE} en cours...`;
-            statusMessageSpan.classList.remove('text-purple-600', 'text-green-600', 'text-yellow-600');
-            statusMessageSpan.classList.add('text-blue-600');
-
-            // Calculate/Recalculate timings based on current speed control for this individual's wave
-            const sV = parseInt(speedControl.value);
-            currentRealWaveDuration = BASE_WAVE_DURATION / sV;
-            let desiredInterval = currentRealWaveDuration / TARGET_AI_ITERATIONS;
-            currentAiDecisionInterval = Math.max(desiredInterval, MIN_AI_DECISION_INTERVAL);
-
-            // The wave number for UI can be the generation number
-            // waveNumberSpan.textContent = currentGeneration; // This is now in updateUI
-            // epsilonDisplay.textContent = epsilon.toFixed(2); // Epsilon might need to be per-individual or per-generation too
-
-            initGame();
-            updateUI(); // Call it here to reflect current generation and score
-
-            if(aiDecisionIntervalId) clearInterval(aiDecisionIntervalId);
-            aiDecisionCounter = 0; // Reset decision counter for the individual
-            // makeAIDecision will use neuralNetworks[currentIndividualIndex]
-            aiDecisionIntervalId = setInterval(makeAIDecision, currentAiDecisionInterval);
-
-            if(waveTimerId) clearTimeout(waveTimerId);
-            waveTimerId = setTimeout(() => {
-                endWave(); // This will be the end of wave for currentIndividualIndex
-            }, currentRealWaveDuration);
-        }
-
-        async function endWave() { // For the current individual
-            if (aiDecisionIntervalId) clearInterval(aiDecisionIntervalId);
-
-            const networkForThisWave = neuralNetworks[currentIndividualIndex]; // Capture before it potentially changes
-
-            statusMessageSpan.textContent = `Fin vague Ind. ${currentIndividualIndex + 1}, Gén. ${currentGeneration}. Entraînement...`;
-            statusMessageSpan.classList.remove('text-blue-600');
-            statusMessageSpan.classList.add('text-purple-600');
-            console.log(`[endWave] Wave ${currentGeneration} Ind. ${currentIndividualIndex + 1} ended. Total AI decisions: ${aiDecisionCounter}`);
-
-            await delay(50);
-
-            if (trainingData.length > 0 && networkForThisWave) {
-                try {
-                    console.log(`[endWave] Training Ind. ${currentIndividualIndex + 1} (Gén. ${currentGeneration}) with ${trainingData.length} data points.`);
-                    const stats = await networkForThisWave.train(trainingData, {
-                        iterations: 100,
-                        errorThresh: 0.01,
-                        log: (stats) => console.log(`Ind. ${currentIndividualIndex + 1} Gén. ${currentGeneration} Entraînement: Itération ${stats.iterations}, Erreur ${stats.error.toFixed(4)}`),
-                        logPeriod: 50,
-                        learningRate: 0.1,
-                        momentum: 0.05,
-                        timeout: currentRealWaveDuration * 0.8
-                    });
-                    console.log(`Réseau Ind. ${currentIndividualIndex + 1} (Gén. ${currentGeneration}) entraîné. Erreur: ${stats.error.toFixed(4)}, Itérations: ${stats.iterations}`);
-                } catch (e) {
-                    console.error(`Erreur pendant l'entraînement Ind. ${currentIndividualIndex + 1} (Gén. ${currentGeneration}):`, e);
-                    statusMessageSpan.textContent = `Erreur entraînement Ind. ${currentIndividualIndex + 1}.`;
-                    statusMessageSpan.classList.add('text-red-600');
-                    await delay(2000);
-                }
+            const parent2JSON = scoredNetworks[parent2Index] ? scoredNetworks[parent2Index].networkJSON : bestParentJSON; // Fallback for safety
+            // console.log(\`[processEndOfGenEval] Croisement enfant \${i}: Elite 0 avec Ind. original \${scoredNetworks[parent2Index] ? scoredNetworks[parent2Index].index : scoredNetworks[0].index}\`);
+            let childJson = crossover(bestParentJSON, parent2JSON);
+            if (childJson) {
+                childJson = mutate(childJson, MUTATION_RATE, MUTATION_AMOUNT);
+                nextGenerationJSONs.push(childJson);
             } else {
-                console.log(`Pas de données d'entraînement pour Ind. ${currentIndividualIndex + 1} (Gén. ${currentGeneration}) ou réseau non disponible.`);
+                console.warn("[processEndOfGenEval] Crossover a retourné null, copie du meilleur parent (muté).");
+                let fallbackChild = JSON.parse(JSON.stringify(bestParentJSON));
+                fallbackChild = mutate(fallbackChild, MUTATION_RATE, MUTATION_AMOUNT);
+                nextGenerationJSONs.push(fallbackChild);
             }
+        }
+    } else if (childrenNeeded > 0) {
+         console.warn("[processEndOfGenEval] Pas de réseaux valides pour la reproduction. Remplissage avec de nouveaux réseaux (non entraînés).");
+         for (let i = 0; i < childrenNeeded; i++) {
+             const tempNet = new brain.NeuralNetwork({hiddenLayers: [12,12], activation: 'sigmoid'});
+             // Dummy training is async, cannot easily do it here. These will be "fresh" networks.
+             nextGenerationJSONs.push(tempNet.toJSON());
+         }
+    }
 
-            individualScores[currentIndividualIndex] = score; // Store final score for this individual
-            trainingData = []; // Clear for next use
+    // Repopulate neuralNetworks with new instances
+    const newNeuralNetworks = [];
+    for (let i = 0; i < POPULATION_SIZE; i++) { // Ensure exactly POPULATION_SIZE networks
+        let netJSON = nextGenerationJSONs[i];
+        if (!netJSON) { // If not enough children were generated, fill with new ones
+            console.warn(\`[processEndOfGenEval] Manque de JSON pour l'individu \${i}, création d'un nouveau réseau.\`);
+            const tempNet = new brain.NeuralNetwork({hiddenLayers: [12,12], activation: 'sigmoid'});
+            // Ideally, initialize with dummy training here if possible, or rely on first wave training
+            netJSON = tempNet.toJSON();
+        }
+        try {
+            const net = new window.brain.NeuralNetwork().fromJSON(netJSON);
+            net.colorDisplay = individualColors[i % individualColors.length];
+            newNeuralNetworks.push(net);
+        } catch(e) {
+            console.error(\`Erreur fromJSON pour l'individu \${i}, utilisation d'un fallback.\`, e, netJSON);
+            const fallbackNet = new window.brain.NeuralNetwork({hiddenLayers: [12,12], activation: 'sigmoid'});
+            fallbackNet.colorDisplay = individualColors[i % individualColors.length];
+            newNeuralNetworks.push(fallbackNet);
+        }
+    }
+    neuralNetworks = newNeuralNetworks;
 
-            if(isTraining) {
-                processEndOfIndividualWave();
+    savePopulation();
+
+    // 3. Prepare for Next Generation or End Training
+    currentGeneration++;
+    displayedIndividualIndex = 0; // Champion of new generation is at index 0
+
+    if (currentGeneration > MAX_WAVES) {
+        console.log("[processEndOfGenEval] Nombre maximum de générations atteint.");
+        endTrainingSession(); // This will set isTraining = false
+        return;
+    }
+
+    isTraining = true; // Re-enable training for the next generation's evaluation steps
+
+    console.log(\`[processEndOfGenEval] Préparation de la Génération \${currentGeneration}. Individu affiché: 0 (Champion)\`);
+    currentStepInGeneration = 0;
+    currentWaveScores = new Array(POPULATION_SIZE).fill(0);
+    for (let i = 0; i < POPULATION_SIZE; i++) {
+        populationTrainingData[i] = [];
+    }
+
+    generateCirclesForGeneration(INITIAL_CIRCLES);
+    for (let i = 0; i < POPULATION_SIZE; i++) {
+        initGame(i);
+    }
+
+    if (MAX_WAVES > 1) {
+         epsilon = Math.max(finalEpsilon, initialEpsilon - (initialEpsilon - finalEpsilon) * ((currentGeneration -1) / (MAX_WAVES-1)));
+    } else {
+        epsilon = finalEpsilon;
+    }
+    if(epsilonDisplay) epsilonDisplay.textContent = epsilon.toFixed(2);
+
+    if(statusMessageSpan) statusMessageSpan.textContent = \`Gén. \${currentGeneration}, Ind. \${displayedIndividualIndex + 1}/\${POPULATION_SIZE}...\`; // Update status for new gen
+    updateUI();
+
+    runGenerationEvaluationStep();
+}
+
+// Placeholder Genetic Algorithm functions
+function crossover(networkJSON1, networkJSON2) {
+    if (!networkJSON1 || !networkJSON2) {
+        console.error("Crossover: Un ou les deux parents sont non définis.");
+        return networkJSON1 || networkJSON2 || null;
+    }
+
+    let childJSON = JSON.parse(JSON.stringify(networkJSON1)); // Deep copy parent1
+
+    for (let l = 1; l < childJSON.layers.length; l++) { // Start from layer 1
+        const layer1 = networkJSON1.layers[l];
+        const layer2 = networkJSON2.layers[l];
+        const childLayer = childJSON.layers[l];
+
+        if (!layer1 || !layer2 || !childLayer) {
+            // console.warn(\`Crossover: Layer \${l} manquant ou incomplet chez un parent ou enfant.\`);
+            continue;
+        }
+
+        // Crossover biases
+        if (childLayer.biases && layer1.biases && layer2.biases) {
+            if (Array.isArray(childLayer.biases)) { // Array of numbers
+                for (let i = 0; i < childLayer.biases.length; i++) {
+                    if (layer1.biases[i] !== undefined && layer2.biases[i] !== undefined) {
+                        childLayer.biases[i] = (layer1.biases[i] + layer2.biases[i]) / 2;
+                    }
+                }
+            } else { // Object format: { '0': bias_val, ... }
+                for (const neuronIdx in childLayer.biases) {
+                    if (layer1.biases.hasOwnProperty(neuronIdx) && layer2.biases.hasOwnProperty(neuronIdx)) {
+                        childLayer.biases[neuronIdx] = (layer1.biases[neuronIdx] + layer2.biases[neuronIdx]) / 2;
+                    }
+                }
             }
         }
 
-        function endTrainingSession() {
-            stopTraining(); // This already sets isTraining to false
-            statusMessageSpan.textContent = "Entraînement terminé !";
-            statusMessageSpan.classList.remove('text-yellow-600', 'text-blue-600', 'text-purple-600');
-            statusMessageSpan.classList.add('text-green-600');
-            console.log(`Session d'entraînement terminée. Génération finale atteinte: ${currentGeneration}.`);
-            updateUI();
+        // Crossover weights
+        if (childLayer.weights && layer1.weights && layer2.weights) {
+            if (Array.isArray(childLayer.weights)) { // Array of Arrays (e.g., RNNTimeStep)
+                 for (let i = 0; i < childLayer.weights.length; i++) { // Neuron index or input index
+                    if (layer1.weights[i] && layer2.weights[i] && Array.isArray(childLayer.weights[i])) {
+                        for (let j = 0; j < childLayer.weights[i].length; j++) { // Weight index
+                            if (layer1.weights[i][j] !== undefined && layer2.weights[i][j] !== undefined) {
+                                childLayer.weights[i][j] = (layer1.weights[i][j] + layer2.weights[i][j]) / 2;
+                            }
+                        }
+                    }
+                }
+            } else { // Object of Arrays (e.g., NeuralNetwork)
+                for (const neuronIdx in childLayer.weights) {
+                    if (layer1.weights.hasOwnProperty(neuronIdx) && layer2.weights.hasOwnProperty(neuronIdx) &&
+                        Array.isArray(childLayer.weights[neuronIdx])) {
+                        const weights1 = layer1.weights[neuronIdx];
+                        const weights2 = layer2.weights[neuronIdx];
+                        const childWeightsNeuron = childLayer.weights[neuronIdx];
+                        for (let j = 0; j < childWeightsNeuron.length; j++) {
+                            if (weights1[j] !== undefined && weights2[j] !== undefined) {
+                                childWeightsNeuron[j] = (weights1[j] + weights2[j]) / 2;
+                            }
+                        }
+                    }
+                }
+            }
         }
+    }
+    return childJSON;
+}
+
+function mutate(networkJSON, rate, amount) {
+    if (!networkJSON || !networkJSON.layers) {
+        console.error("Mutate: networkJSON non défini ou sans couches.");
+        return networkJSON; // Return as is if invalid
+    }
+
+    for (let l = 1; l < networkJSON.layers.length; l++) { // Start from layer 1
+        const layer = networkJSON.layers[l];
+        if (!layer) continue;
+
+        // Mutate biases
+        if (layer.biases) {
+            if (Array.isArray(layer.biases)) {
+                for (let i = 0; i < layer.biases.length; i++) {
+                    if (Math.random() < rate) {
+                        layer.biases[i] += (Math.random() * 2 - 1) * amount;
+                    }
+                }
+            } else { // Object format
+                for (const neuronIdx in layer.biases) {
+                    if (layer.biases.hasOwnProperty(neuronIdx)) {
+                        if (Math.random() < rate) {
+                            layer.biases[neuronIdx] += (Math.random() * 2 - 1) * amount;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Mutate weights
+        if (layer.weights) {
+            if (Array.isArray(layer.weights)) { // Array of Arrays
+                for (let i = 0; i < layer.weights.length; i++) {
+                    if (layer.weights[i] && Array.isArray(layer.weights[i])) {
+                        for (let j = 0; j < layer.weights[i].length; j++) {
+                            if (Math.random() < rate) {
+                                layer.weights[i][j] += (Math.random() * 2 - 1) * amount;
+                            }
+                        }
+                    }
+                }
+            } else { // Object of Arrays
+                for (const neuronIdx in layer.weights) {
+                    if (layer.weights.hasOwnProperty(neuronIdx) && Array.isArray(layer.weights[neuronIdx])) {
+                        const weightsNeuron = layer.weights[neuronIdx];
+                        for (let j = 0; j < weightsNeuron.length; j++) {
+                            if (Math.random() < rate) {
+                                weightsNeuron[j] += (Math.random() * 2 - 1) * amount;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return networkJSON;
+}
+
+function endTrainingSession() { // Called when MAX_WAVES is reached
+    isTraining = false; // Ensure simulation loop stops
+    if(statusMessageSpan) {
+        statusMessageSpan.textContent = "Entraînement terminé ! (Max Générations)";
+        statusMessageSpan.classList.remove('text-yellow-600', 'text-blue-600', 'text-purple-600');
+        statusMessageSpan.classList.add('text-green-600');
+    }
+    if(startButton) { // Reset button to allow restarting
+        startButton.textContent = "Lancer l'entraînement";
+        startButton.classList.remove('bg-red-600', 'hover:bg-red-700');
+        startButton.classList.add('bg-green-600', 'hover:bg-green-700');
+    }
+    console.log(\`[endTrainingSession] Entraînement complet terminé après \${currentGeneration -1} générations.\`); // currentGeneration was already incremented
+    updateUI(); // Final UI update
+}
 
         function updateUI() {
-            currentScoreSpan.textContent = score.toFixed(0); // Score of the current individual's wave
-            waveNumberSpan.textContent = currentGeneration;
-            epsilonDisplay.textContent = epsilon.toFixed(2);
+    // Ensure displayedIndividualIndex is valid before accessing arrays
+    const displayIdx = (displayedIndividualIndex >= 0 && displayedIndividualIndex < POPULATION_SIZE) ? displayedIndividualIndex : 0;
 
-            // New part for individual display
-            const currentIndividualDisplaySpan = document.getElementById('currentIndividualDisplay');
-            if (currentIndividualDisplaySpan) {
-                if (isTraining) {
-                    currentIndividualDisplaySpan.textContent = `${currentIndividualIndex + 1} / ${POPULATION_SIZE}`;
-                } else {
-                    currentIndividualDisplaySpan.textContent = "N/A";
-                }
-            }
+    // currentScoreSpan now reflects the score of the displayed individual for the current wave
+    if (currentWaveScores && currentWaveScores.length > displayIdx) {
+        currentScoreSpan.textContent = currentWaveScores[displayIdx].toFixed(0);
+    } else {
+        currentScoreSpan.textContent = "0";
+    }
+
+    waveNumberSpan.textContent = currentGeneration;
+    epsilonDisplay.textContent = epsilon.toFixed(2);
+
+    const currentIndividualDisplaySpan = document.getElementById('currentIndividualDisplay');
+    if (currentIndividualDisplaySpan) {
+        if (isTraining) {
+            currentIndividualDisplaySpan.textContent = \`\${displayIdx + 1} / \${POPULATION_SIZE}\`;
+        } else {
+            currentIndividualDisplaySpan.textContent = "N/A";
         }
+    }
+}
 
-        function savePopulation() {
-            if (neuralNetworks.length === 0) return;
-            try {
-                const populationJson = neuralNetworks.map(net => net.toJSON());
-                localStorage.setItem('populationNeuralNetworkWeights_v1', JSON.stringify(populationJson));
-                console.log("Poids de la population de réseaux de neurones sauvegardés.");
-            } catch (error) {
-                console.error("Erreur lors de la sauvegarde de la population de réseaux de neurones:", error);
+function savePopulation() {
+    if (neuralNetworks.length === 0) return;
+    try {
+        const populationJson = neuralNetworks.map(net => {
+            if (net && typeof net.toJSON === 'function') {
+                return net.toJSON();
             }
+            console.warn("[savePopulation] Un réseau dans la population n'a pas pu être converti en JSON ou est indéfini.");
+            return null; // ou une structure JSON par défaut/vide
+        }).filter(json => json !== null); // Filtrer les nuls potentiels
+
+        if (populationJson.length > 0) {
+            localStorage.setItem('populationNeuralNetworkWeights_v1', JSON.stringify(populationJson));
+            console.log("Poids de la population de réseaux de neurones sauvegardés.");
+        } else {
+            console.warn("[savePopulation] Aucun réseau valide à sauvegarder dans la population.");
         }
+    } catch (error) {
+        console.error("Erreur lors de la sauvegarde de la population de réseaux de neurones:", error);
+    }
+}
 
-        function crossover(networkJSON1, networkJSON2) {
-            if (!networkJSON1 || !networkJSON2) {
-                console.error("Crossover: Un ou les deux parents sont non définis.");
-                return networkJSON1 || networkJSON2 || null; // Return a parent if one is null, or null if both
-            }
-
-            // Deep copy parent1 to create the child structure.
-            // This also copies other network properties like 'sizes', 'activation', 'outputLayer', etc.
-            let childJSON = JSON.parse(JSON.stringify(networkJSON1));
-
-            // Iterate through layers (Brain.js JSON usually has an empty layer 0 for input)
-            // Weight/bias processing typically starts from layer 1.
-            for (let l = 1; l < childJSON.layers.length; l++) {
-                const layer1 = networkJSON1.layers[l];
-                const layer2 = networkJSON2.layers[l];
-                const childLayer = childJSON.layers[l];
-
-                if (!layer1 || !layer2) {
-                    // console.warn(`Crossover: Layer ${l} manquant chez un parent.`);
-                    continue;
-                }
-
-                // Crossover biases
-                if (childLayer.biases && layer1.biases && layer2.biases) {
-                    // Assuming biases is an object like: { '0': bias_val, '1': bias_val, ... }
-                    // Or an array: [bias_val, bias_val, ...]
-                    if (Array.isArray(childLayer.biases)) {
-                        for (let i = 0; i < childLayer.biases.length; i++) {
-                            if (layer1.biases[i] !== undefined && layer2.biases[i] !== undefined) {
-                                childLayer.biases[i] = (layer1.biases[i] + layer2.biases[i]) / 2;
-                            }
-                        }
-                    } else { // Object format
-                        for (const neuronIdx in childLayer.biases) {
-                            if (layer1.biases.hasOwnProperty(neuronIdx) && layer2.biases.hasOwnProperty(neuronIdx)) {
-                                childLayer.biases[neuronIdx] = (layer1.biases[neuronIdx] + layer2.biases[neuronIdx]) / 2;
-                            }
-                        }
-                    }
-                }
-
-                // Crossover weights
-                if (childLayer.weights && layer1.weights && layer2.weights) {
-                    // Assuming weights is an object of arrays: { '0': [w1, w2], '1': [w3, w4], ... }
-                    // Or an array of arrays: [ [w1, w2], [w3, w4], ...]
-                    if (Array.isArray(childLayer.weights)) { // Array of arrays (typical for brain.recurrent.RNNTimeStep)
-                         for (let i = 0; i < childLayer.weights.length; i++) { // Neuron index
-                            if (layer1.weights[i] && layer2.weights[i] && Array.isArray(childLayer.weights[i])) {
-                                for (let j = 0; j < childLayer.weights[i].length; j++) { // Weight index for this neuron
-                                    if (layer1.weights[i][j] !== undefined && layer2.weights[i][j] !== undefined) {
-                                        childLayer.weights[i][j] = (layer1.weights[i][j] + layer2.weights[i][j]) / 2;
-                                    }
-                                }
-                            }
-                        }
-                    } else { // Object of arrays (typical for brain.NeuralNetwork)
-                        for (const neuronIdx in childLayer.weights) { // neuronIdx is a string '0', '1', etc.
-                            if (layer1.weights.hasOwnProperty(neuronIdx) && layer2.weights.hasOwnProperty(neuronIdx) &&
-                                Array.isArray(childLayer.weights[neuronIdx])) {
-                                const weights1 = layer1.weights[neuronIdx];
-                                const weights2 = layer2.weights[neuronIdx];
-                                const childWeightsNeuron = childLayer.weights[neuronIdx];
-                                for (let j = 0; j < childWeightsNeuron.length; j++) {
-                                    if (weights1[j] !== undefined && weights2[j] !== undefined) {
-                                        childWeightsNeuron[j] = (weights1[j] + weights2[j]) / 2;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            return childJSON;
-        }
-
-        function mutate(networkJSON, rate, amount) {
-            if (!networkJSON) {
-                console.error("Mutate: networkJSON non défini.");
-                return null;
-            }
-
-            // Iterate through layers (similarly to crossover)
-            for (let l = 1; l < networkJSON.layers.length; l++) {
-                const layer = networkJSON.layers[l];
-
-                if (!layer) continue;
-
-                // Mutate biases
-                if (layer.biases) {
-                    if (Array.isArray(layer.biases)) {
-                        for (let i = 0; i < layer.biases.length; i++) {
-                            if (Math.random() < rate) {
-                                layer.biases[i] += (Math.random() * 2 - 1) * amount;
-                            }
-                        }
-                    } else { // Object format
-                        for (const neuronIdx in layer.biases) {
-                            if (layer.biases.hasOwnProperty(neuronIdx)) {
-                                if (Math.random() < rate) {
-                                    layer.biases[neuronIdx] += (Math.random() * 2 - 1) * amount;
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // Mutate weights
-                if (layer.weights) {
-                    if (Array.isArray(layer.weights)) { // Array of arrays
-                        for (let i = 0; i < layer.weights.length; i++) { // Neuron index
-                            if (Array.isArray(layer.weights[i])) {
-                                for (let j = 0; j < layer.weights[i].length; j++) { // Weight index
-                                    if (Math.random() < rate) {
-                                        layer.weights[i][j] += (Math.random() * 2 - 1) * amount;
-                                    }
-                                }
-                            }
-                        }
-                    } else { // Object of arrays
-                        for (const neuronIdx in layer.weights) {
-                            if (layer.weights.hasOwnProperty(neuronIdx) && Array.isArray(layer.weights[neuronIdx])) {
-                                const weightsNeuron = layer.weights[neuronIdx];
-                                for (let j = 0; j < weightsNeuron.length; j++) {
-                                    if (Math.random() < rate) {
-                                        weightsNeuron[j] += (Math.random() * 2 - 1) * amount;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            return networkJSON; // Return the (now mutated) JSON object
-        }
-
-        async function loadNeuralNetwork() {
-            const savedPopulationWeights = localStorage.getItem('populationNeuralNetworkWeights_v1');
-            if (savedPopulationWeights) {
-                try {
-                    const populationJson = JSON.parse(savedPopulationWeights);
-                    if (!window.brain || !window.brain.NeuralNetwork) {
-                        console.error("Brain.js n'est pas disponible pour charger les réseaux.");
-                        await createNewNeuralNetwork();
-                        return;
-                    }
-                    if (Array.isArray(populationJson) && populationJson.length === POPULATION_SIZE) {
-                        neuralNetworks = []; // Clear existing
-                        let allLoaded = true;
-                        for (let i = 0; i < POPULATION_SIZE; i++) {
-                            const net = new window.brain.NeuralNetwork().fromJSON(populationJson[i]);
-                            net.colorDisplay = individualColors[i % individualColors.length];
-                            neuralNetworks.push(net);
-                        }
-                        console.log(`${POPULATION_SIZE} réseaux de neurones chargés depuis localStorage.`);
-                        statusMessageSpan.textContent = "Prêt (Population chargée)";
-                        return; // Successfully loaded
-                    } else {
-                        console.log("Données de population sauvegardées non valides ou taille incorrecte. Création de nouveaux réseaux.");
-                    }
-                } catch (error) {
-                    console.error("Erreur lors du chargement des poids de la population:", error);
-                }
-            }
-            // If loading failed or no saved data:
-            await createNewNeuralNetwork();
-        }
-
-        async function createNewNeuralNetwork() { // Note: This function becomes responsible for the whole population
+async function loadNeuralNetwork() {
+    const savedPopulationWeights = localStorage.getItem('populationNeuralNetworkWeights_v1');
+    if (savedPopulationWeights) {
+        try {
+            const populationJson = JSON.parse(savedPopulationWeights);
             if (!window.brain || !window.brain.NeuralNetwork) {
-                console.error("Brain.js n'est pas disponible pour créer de nouveaux réseaux.");
-                statusMessageSpan.textContent = "Erreur: Brain.js manquant.";
-                statusMessageSpan.classList.add('text-red-600');
-                startButton.disabled = true;
-                return; // Important to stop if brain is not loaded
+                console.error("Brain.js n'est pas disponible pour charger les réseaux.");
+                await createNewNeuralNetwork(); // Attempt to create new ones
+                return;
             }
-            neuralNetworks = []; // Clear any existing networks
-            let allInitialized = true;
-            for (let i = 0; i < POPULATION_SIZE; i++) {
-                const net = new window.brain.NeuralNetwork({
-                    hiddenLayers: [12, 12], // Example, keep original config if any
-                    activation: 'sigmoid',
-                });
-
-                // Initialize with dummy training to make it runnable
-                try {
-                    const dummyInput = {
-                        squareX: 0.5, squareY: 0.5,
-                        closestCircleX: 0.5, closestCircleY: 0.5,
-                        distanceToClosestCircle: 0.5,
-                        distanceToLeftWall: 0.5, distanceToRightWall: 0.5,
-                        distanceToTopWall: 0.5, distanceToBottomWall: 0.5
-                    };
-                    const dummyOutput = { idle: 0, up: 0, down: 0, left: 0, right: 0 };
-                    OUTPUT_ACTIONS.forEach(action => dummyOutput[action] = 0);
-                    dummyOutput.idle = 1;
-                    await net.train([{ input: dummyInput, output: dummyOutput }], {
-                        iterations: 1, errorThresh: 0.9, log: false, learningRate: 0.01
-                    });
-                    net.colorDisplay = individualColors[i % individualColors.length]; // Assign color
+            if (Array.isArray(populationJson) && populationJson.length === POPULATION_SIZE) {
+                neuralNetworks = []; // Clear existing
+                for (let i = 0; i < POPULATION_SIZE; i++) {
+                    const net = new window.brain.NeuralNetwork().fromJSON(populationJson[i]);
+                    net.colorDisplay = individualColors[i % individualColors.length];
                     neuralNetworks.push(net);
-                } catch (e) {
-                    console.error(`Erreur lors de l'entraînement factice initial pour le réseau ${i}:`, e);
-                    allInitialized = false;
-                    break;
                 }
-            }
-
-            if (allInitialized && neuralNetworks.length === POPULATION_SIZE) {
-                console.log(`${POPULATION_SIZE} nouveaux réseaux de neurones créés et initialisés.`);
-                statusMessageSpan.textContent = "Prêt (Nouvelle population de réseaux)";
+                console.log(\`${POPULATION_SIZE} réseaux de neurones chargés depuis localStorage.\`);
+                if(statusMessageSpan) statusMessageSpan.textContent = "Prêt (Population chargée)";
+                return;
             } else {
-                neuralNetworks = []; // Clear partially initialized population
-                statusMessageSpan.textContent = "Erreur d'initialisation de la population.";
-                statusMessageSpan.classList.remove('text-yellow-600');
-                statusMessageSpan.classList.add('text-red-600');
-                startButton.disabled = true;
+                console.log("Données de population sauvegardées non valides ou taille incorrecte. Création de nouveaux réseaux.");
             }
+        } catch (error) {
+            console.error("Erreur lors du chargement des poids de la population:", error);
         }
+    }
+    // If loading failed or no saved data:
+    await createNewNeuralNetwork();
+}
+
+async function createNewNeuralNetwork() {
+    if (!window.brain || !window.brain.NeuralNetwork) {
+        console.error("Brain.js n'est pas disponible pour créer de nouveaux réseaux.");
+        statusMessageSpan.textContent = "Erreur: Brain.js manquant.";
+        if(startButton) startButton.disabled = true;
+        return;
+    }
+    neuralNetworks = []; // Clear any existing networks
+    let allInitialized = true;
+    console.log(\`[createNewNeuralNetwork] Initialisation de ${POPULATION_SIZE} nouveaux réseaux.\`);
+    for (let i = 0; i < POPULATION_SIZE; i++) {
+        const net = new window.brain.NeuralNetwork({
+            hiddenLayers: [12, 12],
+            activation: 'sigmoid',
+        });
+
+        try {
+            const dummyInput = {
+                squareX: 0.5, squareY: 0.5, closestCircleX: 0.5, closestCircleY: 0.5,
+                distanceToClosestCircle: 0.5, distanceToLeftWall: 0.5, distanceToRightWall: 0.5,
+                distanceToTopWall: 0.5, distanceToBottomWall: 0.5
+            };
+            const dummyOutput = { idle: 0, up: 0, down: 0, left: 0, right: 0 };
+            OUTPUT_ACTIONS.forEach(action => dummyOutput[action] = 0);
+            dummyOutput.idle = 1;
+
+            await net.train([{ input: dummyInput, output: dummyOutput }], {
+                iterations: 1, errorThresh: 0.9, log: false, learningRate: 0.01, timeout: 100 // Short timeout for dummy
+            });
+            net.colorDisplay = individualColors[i % individualColors.length];
+            neuralNetworks.push(net);
+        } catch (e) {
+            console.error(\`Erreur lors de l'entraînement factice initial pour le réseau ${i}:\`, e);
+            allInitialized = false;
+            break;
+        }
+    }
+
+    if (allInitialized && neuralNetworks.length === POPULATION_SIZE) {
+        console.log(\`${POPULATION_SIZE} nouveaux réseaux de neurones créés et initialisés.\`);
+        if(statusMessageSpan) statusMessageSpan.textContent = "Prêt (Nouvelle population de réseaux)";
+    } else {
+        neuralNetworks = [];
+        if(statusMessageSpan) {
+            statusMessageSpan.textContent = "Erreur d'initialisation de la population.";
+            statusMessageSpan.classList.remove('text-yellow-600');
+            statusMessageSpan.classList.add('text-red-600');
+        }
+        if(startButton) startButton.disabled = true;
+    }
+}
     </script>
 </body>
 </html>
