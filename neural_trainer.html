@@ -80,6 +80,10 @@
         const PENALTY_WALL_COLLISION = -1;
         const REWARD_MOVE_TOWARDS_CIRCLE = 0.2;
 
+        // Nouvelles constantes pour la récompense de direction
+        const NEW_REWARD_DIRECT_HEADING = 0.3;
+        const NEW_PENALTY_WRONG_HEADING = 0.15;
+
         // Variables du jeu
         let canvas, ctx;
 
@@ -342,70 +346,87 @@ function draw() {
     if (!ctx) return;
     ctx.clearRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
 
-    // --- Début de l'ajout pour les fantômes ---
+    let activeIndividualIndex = displayedIndividualIndex; // Par défaut, l'index global
+    let circlesForDisplay = populationCircles[activeIndividualIndex];
+
+    if (showGhostIndividuals && Array.isArray(currentWaveScores) && currentWaveScores.length === POPULATION_SIZE) {
+        let bestScore = -Infinity;
+        let potentialBestIndex = -1;
+        for (let i = 0; i < POPULATION_SIZE; i++) {
+            if (currentWaveScores[i] > bestScore) {
+                bestScore = currentWaveScores[i];
+                potentialBestIndex = i;
+            }
+        }
+        if (potentialBestIndex !== -1) {
+            activeIndividualIndex = potentialBestIndex;
+        }
+        // S'assurer que les cercles correspondent au meilleur individu s'il est trouvé,
+        // ou à l'index actif par défaut sinon.
+        if (populationCircles && populationCircles[activeIndividualIndex]) {
+             circlesForDisplay = populationCircles[activeIndividualIndex];
+        } else if (populationCircles && populationCircles[displayedIndividualIndex]) {
+             // Fallback si populationCircles[activeIndividualIndex] n'existe pas pour une raison
+             circlesForDisplay = populationCircles[displayedIndividualIndex];
+             activeIndividualIndex = displayedIndividualIndex; // Revenir à l'index global sûr
+        } else {
+             circlesForDisplay = []; // Aucun cercle à afficher
+        }
+    } else if (populationCircles && populationCircles[displayedIndividualIndex]){
+        // Mode non-fantôme ou scores non disponibles, utiliser l'index global
+        circlesForDisplay = populationCircles[displayedIndividualIndex];
+    } else {
+        circlesForDisplay = [];
+    }
+
+
+    // --- Dessin des fantômes (si activé) ---
     if (showGhostIndividuals && Array.isArray(squares) && Array.isArray(neuralNetworks)) {
         for (let i = 0; i < POPULATION_SIZE; i++) {
-            if (i === displayedIndividualIndex) {
-                continue; // Ne pas dessiner l'individu principal comme un fantôme
+            if (i === activeIndividualIndex) { // Utiliser activeIndividualIndex ici
+                continue;
             }
-
+            // ... (le reste du code de dessin des fantômes reste identique à avant,
+            // s'assurant qu'il utilise ghostSquare = squares[i] etc.) ...
             const ghostSquare = squares[i];
             const ghostNetwork = neuralNetworks[i];
 
             if (ghostSquare && ghostNetwork && ghostNetwork.colorDisplay) {
-                // Conserver la couleur originale mais la rendre beaucoup plus transparente
-                // Exemple: 'rgba(59, 130, 246, 0.9)' devient 'rgba(59, 130, 246, 0.05)'
                 let ghostColor = ghostNetwork.colorDisplay.replace(/, ?\d+(\.\d+)?\)/, ', 0.05)');
-
-                // Si la couleur n'a pas de canal alpha (par exemple, format rgb() ou couleur nommée)
-                // on la transforme en rgba avec faible alpha. Ceci est une gestion basique.
                 if (!ghostColor.includes('rgba')) {
                     if (ghostColor.startsWith('rgb(')) {
                         ghostColor = ghostColor.replace('rgb(', 'rgba(').replace(')', ', 0.05)');
-                    } else {
-                        // Pour les couleurs nommées ou hex, il faudrait une conversion plus complexe.
-                        // On utilise un gris par défaut pour simplifier si la couleur n'est pas déjà rgba.
-                        // Ou on s'assure que toutes les 'colorDisplay' sont en format 'rgba'.
-                        // Supposons pour l'instant que colorDisplay est toujours 'rgba(..., ..., ..., 0.9)'.
                     }
                 }
-
                 ctx.fillStyle = ghostColor;
                 ctx.fillRect(ghostSquare.x, ghostSquare.y, ghostSquare.size, ghostSquare.size);
             }
         }
     }
-    // --- Fin de l'ajout pour les fantômes ---
 
-    // Ensure displayedIndividualIndex is valid (code existant)
-    if (displayedIndividualIndex < 0 || displayedIndividualIndex >= POPULATION_SIZE || !squares[displayedIndividualIndex]) {
-        // console.warn(\`[draw] displayedIndividualIndex (\${displayedIndividualIndex}) hors limites ou carré non défini.\`);
+    // --- Dessin de l'individu principal (maintenant activeIndividualIndex) ---
+    if (activeIndividualIndex < 0 || activeIndividualIndex >= POPULATION_SIZE || !squares[activeIndividualIndex]) {
         return;
     }
 
-    const currentSquareToDraw = squares[displayedIndividualIndex];
-    // const currentCirclesToDraw = populationCircles[displayedIndividualIndex]; // Déjà existant, si besoin plus tard
-
+    const currentSquareToDraw = squares[activeIndividualIndex];
     if (!currentSquareToDraw) {
-        // console.log(\`[draw] Pas de carré à dessiner pour l'individu \${displayedIndividualIndex}\`);
         return;
     }
 
-    // Set fillStyle based on the displayed individual's network color (code existant)
-    if (neuralNetworks && neuralNetworks[displayedIndividualIndex] && neuralNetworks[displayedIndividualIndex].colorDisplay) {
-        ctx.fillStyle = neuralNetworks[displayedIndividualIndex].colorDisplay;
+    if (neuralNetworks && neuralNetworks[activeIndividualIndex] && neuralNetworks[activeIndividualIndex].colorDisplay) {
+        ctx.fillStyle = neuralNetworks[activeIndividualIndex].colorDisplay;
     } else {
-        ctx.fillStyle = 'rgba(59, 130, 246, 0.9)'; // Fallback color (code existant)
+        ctx.fillStyle = 'rgba(59, 130, 246, 0.9)';
     }
     ctx.fillRect(currentSquareToDraw.x, currentSquareToDraw.y, currentSquareToDraw.size, currentSquareToDraw.size);
-    ctx.strokeStyle = '#2563eb'; // (code existant)
-    ctx.lineWidth = 2; // (code existant)
-    ctx.strokeRect(currentSquareToDraw.x, currentSquareToDraw.y, currentSquareToDraw.size, currentSquareToDraw.size); // (code existant)
+    ctx.strokeStyle = '#2563eb';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(currentSquareToDraw.x, currentSquareToDraw.y, currentSquareToDraw.size, currentSquareToDraw.size);
 
-    // Dessiner les cercles (code existant)
-    const currentCirclesToDraw = populationCircles[displayedIndividualIndex]; // S'assurer qu'il est défini ici
-    if (currentCirclesToDraw) {
-        currentCirclesToDraw.forEach(circle => {
+    // --- Dessin des cercles (maintenant circlesForDisplay) ---
+    if (circlesForDisplay) { // Vérifier si circlesForDisplay est défini
+        circlesForDisplay.forEach(circle => {
             if (!circle.collected) {
                 ctx.beginPath();
                 ctx.arc(circle.x, circle.y, circle.radius, 0, Math.PI * 2);
@@ -529,7 +550,7 @@ function makeAIDecision(individualIndex) {
 
     // Reward is calculated based on the action taken from the current state (inputs)
     // and the previous state (lastSquarePositions[individualIndex])
-    const reward = calculateReward(chosenAction, inputs, individualIndex);
+    const reward = calculateReward(chosenAction, inputs, individualIndex, currentIndSquare.dx, currentIndSquare.dy);
     currentWaveScores[individualIndex] += reward;
 
     const outputForTraining = {};
@@ -547,51 +568,92 @@ function makeAIDecision(individualIndex) {
     // uses the state *before* that next decision's move.
 }
 
-function calculateReward(action, inputs, individualIndex) {
+function calculateReward(action, inputs, individualIndex, moveDx, moveDy) {
     let reward = 0;
-            reward -= 0.001; // Small penalty per step to encourage efficiency
-    const currentDistanceToCircle = inputs.distanceToClosestCircle;
-    const currentIndSquare = squares[individualIndex];
-    const currentIndLastSquarePos = lastSquarePositions[individualIndex];
+    reward -= 0.001; // Small penalty per step to encourage efficiency (existant)
 
-    const closestCircleX = inputs.closestCircleX * GAME_WIDTH;
-    const closestCircleY = inputs.closestCircleY * GAME_HEIGHT;
+    const currentDistanceToCircle = inputs.distanceToClosestCircle; // Existant
+    const currentIndSquare = squares[individualIndex]; // Existant
+    const currentIndLastSquarePos = lastSquarePositions[individualIndex]; // Existant
 
-    if (!currentIndLastSquarePos) {
-        // console.warn(\`[calculateReward] lastSquarePositions[\${individualIndex}] non défini.\`);
-        return 0;
+    // --- Début de la NOUVELLE LOGIQUE pour la récompense de direction ---
+    if (currentIndSquare && inputs.distanceToClosestCircle < 1 && (moveDx !== 0 || moveDy !== 0)) { // Si un cercle est visible et qu'il y a mouvement
+        const closestCircleX_abs = inputs.closestCircleX * GAME_WIDTH;
+        const closestCircleY_abs = inputs.closestCircleY * GAME_HEIGHT;
+
+        // Vecteur du carré vers le cercle
+        let vecToCircleX = closestCircleX_abs - (currentIndSquare.x + SQUARE_SIZE / 2); // Centre du carré
+        let vecToCircleY = closestCircleY_abs - (currentIndSquare.y + SQUARE_SIZE / 2); // Centre du carré
+        const magVecToCircle = Math.sqrt(vecToCircleX * vecToCircleX + vecToCircleY * vecToCircleY);
+
+        if (magVecToCircle > 0) { // Normaliser le vecteur vers le cercle
+            vecToCircleX /= magVecToCircle;
+            vecToCircleY /= magVecToCircle;
+
+            // Normaliser le vecteur de mouvement (moveDx, moveDy)
+            const magMoveVec = Math.sqrt(moveDx * moveDx + moveDy * moveDy);
+            // moveDx et moveDy ne devraient pas être tous les deux 0 ici à cause de la condition externe,
+            // mais une vérification de magMoveVec > 0 est plus sûre si moveDx/moveDy pouvaient être très petits.
+            // Cependant, moveSpeed est 5, donc magMoveVec sera 5 ou Math.sqrt(50) si diagonal.
+
+            const moveVecNormX = moveDx / magMoveVec;
+            const moveVecNormY = moveDy / magMoveVec;
+
+            // Calculer le produit scalaire
+            const dotProduct = (moveVecNormX * vecToCircleX) + (moveVecNormY * vecToCircleY);
+
+            const HEADING_THRESHOLD_POSITIVE = 0.7; // Seuil pour bonne direction
+            const HEADING_THRESHOLD_NEGATIVE = -0.7; // Seuil pour mauvaise direction (déjà défini)
+
+            if (dotProduct > HEADING_THRESHOLD_POSITIVE) {
+                reward += NEW_REWARD_DIRECT_HEADING;
+                // console.log(`Ind ${individualIndex}: Bonne direction! Reward +${NEW_REWARD_DIRECT_HEADING}`);
+            } else if (dotProduct < HEADING_THRESHOLD_NEGATIVE) {
+                reward -= NEW_PENALTY_WRONG_HEADING; // Soustraire la pénalité
+                // console.log(`Ind ${individualIndex}: Mauvaise direction! Penalty -${NEW_PENALTY_WRONG_HEADING}`);
+            }
+        }
     }
-    if (!currentIndSquare) { // Should not happen if logic flows correctly
-        // console.warn(\`[calculateReward] squares[\${individualIndex}] non défini.\`);
-        return PENALTY_IDLE; // Penalize if square somehow vanished
+    // --- Fin de la NOUVELLE LOGIQUE ---
+
+    // Logique de récompense existante (basée sur la distance)
+    if (currentIndLastSquarePos && currentIndSquare) { // S'assurer que ces objets existent
+         const closestCircleX_abs_for_dist_calc = inputs.closestCircleX * GAME_WIDTH; // Répété pour clarté, pourrait être optimisé
+         const closestCircleY_abs_for_dist_calc = inputs.closestCircleY * GAME_HEIGHT; // Répété pour clarté
+
+         const prevStepDistanceToCurrentCircle = Math.sqrt(
+             Math.pow(currentIndLastSquarePos.x - closestCircleX_abs_for_dist_calc, 2) +
+             Math.pow(currentIndLastSquarePos.y - closestCircleY_abs_for_dist_calc, 2)
+         ) / Math.sqrt(GAME_WIDTH * GAME_WIDTH + GAME_HEIGHT * GAME_HEIGHT); // Normalisation existante
+
+         if (currentDistanceToCircle < prevStepDistanceToCurrentCircle) {
+             reward += REWARD_MOVE_TOWARDS_CIRCLE;
+         } else if (currentDistanceToCircle > prevStepDistanceToCurrentCircle && inputs.distanceToClosestCircle < 1) {
+             // Pénalité si on s'éloigne d'un cercle visible
+             reward -= REWARD_MOVE_TOWARDS_CIRCLE * 0.5; // Existant
+         }
+    } else {
+        // console.warn(`[calculateReward] currentIndLastSquarePos ou currentIndSquare non défini pour l'individu ${individualIndex}`);
     }
 
-    const prevStepDistanceToCurrentCircle = Math.sqrt(
-        Math.pow(currentIndLastSquarePos.x - closestCircleX, 2) +
-        Math.pow(currentIndLastSquarePos.y - closestCircleY, 2)
-    ) / Math.sqrt(GAME_WIDTH * GAME_WIDTH + GAME_HEIGHT * GAME_HEIGHT);
 
-    if (currentDistanceToCircle < prevStepDistanceToCurrentCircle) {
-        reward += REWARD_MOVE_TOWARDS_CIRCLE;
-    } else if (currentDistanceToCircle > prevStepDistanceToCurrentCircle && inputs.distanceToClosestCircle < 1) {
-        reward -= REWARD_MOVE_TOWARDS_CIRCLE * 0.5;
-    }
-
-    if (action === 'idle') {
+    if (action === 'idle') { // Existant
         reward += PENALTY_IDLE;
     }
 
+    // Pénalité de collision avec le mur (existante)
     if (inputs.distanceToLeftWall <= 0.01 || inputs.distanceToRightWall <= 0.01 ||
         inputs.distanceToTopWall <= 0.01 || inputs.distanceToBottomWall <= 0.01) {
-        if ((action === 'left' && inputs.distanceToLeftWall <= 0.01) ||
-            (action === 'right' && inputs.distanceToRightWall <= 0.01) ||
-            (action === 'up' && inputs.distanceToTopWall <= 0.01) ||
-            (action === 'down' && inputs.distanceToBottomWall <= 0.01)) {
-             reward += PENALTY_WALL_COLLISION;
-        } else if (currentIndSquare.x <=0 || currentIndSquare.x + currentIndSquare.size >= GAME_WIDTH ||
-                   currentIndSquare.y <=0 || currentIndSquare.y + currentIndSquare.size >= GAME_HEIGHT){
-             reward += PENALTY_WALL_COLLISION * 0.5;
-        }
+        // ... (code de collision existant) ...
+         if ((action === 'left' && inputs.distanceToLeftWall <= 0.01) ||
+             (action === 'right' && inputs.distanceToRightWall <= 0.01) ||
+             (action === 'up' && inputs.distanceToTopWall <= 0.01) ||
+             (action === 'down' && inputs.distanceToBottomWall <= 0.01)) {
+              reward += PENALTY_WALL_COLLISION;
+         } else if (currentIndSquare && (currentIndSquare.x <=0 || currentIndSquare.x + currentIndSquare.size >= GAME_WIDTH ||
+                    currentIndSquare.y <=0 || currentIndSquare.y + currentIndSquare.size >= GAME_HEIGHT)){
+              reward += PENALTY_WALL_COLLISION * 0.5;
+         }
     }
     return reward;
 }
