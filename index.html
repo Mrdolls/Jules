@@ -518,7 +518,7 @@
 											}
 										}).catch(e => {
 											console.error("Error during dummy network creation for JSON load:", e);
-											statusMessageSpan.textContent = \`Erreur: \${e.message}\`;
+											statusMessageSpan.textContent = `Erreur: ${e.message}`;
 											statusMessageSpan.className = 'font-bold text-red-400';
 										});
 										return;
@@ -543,7 +543,7 @@
 
 							} catch (error) {
 								console.error("Erreur lors du chargement ou du parsing du JSON:", error);
-								statusMessageSpan.textContent = \`Erreur: \${error.message}\`;
+								statusMessageSpan.textContent = `Erreur: ${error.message}`;
 								statusMessageSpan.className = 'font-bold text-red-400'; // Adjusted for dark theme
 							}
 						};
@@ -1345,7 +1345,7 @@
 		}
 
 		async function processEndOfGenerationEvaluation() {
-			console.log(\`[processEndOfGenEval] End of Gen. \${currentGeneration} evaluation. Training networks...\`);
+			console.log(`[processEndOfGenEval] End of Gen. ${currentGeneration} evaluation. Training networks...`);
 
 			if (loadingOverlay) loadingOverlay.classList.remove('hidden');
 			if (progressBar) progressBar.style.width = '0%';
@@ -1373,19 +1373,19 @@
 						if (progressBar) progressBar.style.width = percentage + '%';
 						if (loadingText) loadingText.textContent = `Entraînement des réseaux... ${percentage.toFixed(0)}%`;
 					} catch (e) {
-						console.error(\`Training error Ind. \${i} Gen. \${currentGeneration}:\`, e);
+						console.error(`Training error Ind. ${i} Gen. ${currentGeneration}:`, e);
 					}
 				}
 				individualScores[i] = currentWaveScores[i];
 			}
-			console.log(\`[processEndOfGenEval] Final scores Gen. \${currentGeneration}: [\${individualScores.map(s => s.toFixed(2)).join(', ')}]\`);
+			console.log(`[processEndOfGenEval] Final scores Gen. ${currentGeneration}: [${individualScores.map(s => s.toFixed(2)).join(', ')}]`);
 
 			for (const score of individualScores) {
 				if (score > overallBestScore) {
 					overallBestScore = score;
 				}
 			}
-			console.log(\`[processEndOfGenEval] Overall best score updated: \${overallBestScore.toFixed(2)}\`);
+			console.log(`[processEndOfGenEval] Overall best score updated: ${overallBestScore.toFixed(2)}`);
 
 			let scoredNetworks = neuralNetworks.map((net, index) => ({
 				index: index,
@@ -1463,7 +1463,7 @@
 							newColorIndex = (newColorIndex + 1) % individualColors.length;
 						}
 						net.colorDisplay = individualColors[newColorIndex];
-						console.log(\`Individual \${i} mutated and receives new color: \${net.colorDisplay}\`);
+						console.log(`Individual ${i} mutated and receives new color: ${net.colorDisplay}`);
 					} else {
 						net.colorDisplay = individualColors[i % individualColors.length];
 					}
@@ -1473,7 +1473,7 @@
 					if (progressBar) progressBar.style.width = percentage + '%';
 					if (loadingText) loadingText.textContent = `Création de la nouvelle génération... ${percentage.toFixed(0)}%`;
 				} catch (e) {
-					console.error(\`fromJSON error for individual \${i}, using fallback.\`, e, netJSON);
+					console.error(`fromJSON error for individual ${i}, using fallback.`, e, netJSON);
 					const fallbackNet = new window.brain.NeuralNetwork({ hiddenLayers: [16, 16], activation: 'sigmoid' });
 					fallbackNet.wasMutatedThisGeneration = false;
 					fallbackNet.colorDisplay = individualColors[i % individualColors.length];
@@ -1502,7 +1502,7 @@
 
 				isTraining = true; // S'assurer que cela est bien défini avant de continuer
 
-				console.log(\`[processEndOfGenEval] Preparing Generation \${currentGeneration}. Displayed individual: 0 (Champion)\`);
+				console.log(`[processEndOfGenEval] Preparing Generation ${currentGeneration}. Displayed individual: 0 (Champion)`);
 				// ... (le reste du code de préparation de la nouvelle génération qui était déjà là) ...
 				// initGame, epsilon update etc.
 
@@ -1717,7 +1717,7 @@
 			epsilonDisplay.textContent = epsilon.toFixed(2);
 
 			if (isTraining) {
-				statusMessageSpan.textContent = \`Meilleur Score Global: \${overallBestScore.toFixed(2)}\`;
+				statusMessageSpan.textContent = `Meilleur Score Global: ${overallBestScore.toFixed(2)}`;
 				// Adjusted status message colors
 				if (overallBestScore >= 0) {
 					statusMessageSpan.className = 'font-bold text-green-400';
@@ -1766,7 +1766,7 @@
 							net.colorDisplay = individualColors[i % individualColors.length];
 							neuralNetworks.push(net);
 						}
-						console.log(\`\${POPULATION_SIZE} neural networks loaded from localStorage.\`);
+						console.log(`${POPULATION_SIZE} neural networks loaded from localStorage.`);
 						if (statusMessageSpan) statusMessageSpan.textContent = "Prêt (Population chargée)";
 						return;
 					} else {
@@ -1788,7 +1788,7 @@
 			}
 			neuralNetworks = [];
 			let allInitialized = true;
-			console.log(\`[createNewNeuralNetwork] Initializing \${POPULATION_SIZE} new networks.\`);
+			console.log(`[createNewNeuralNetwork] Initializing ${POPULATION_SIZE} new networks.`);
 			for (let i = 0; i < POPULATION_SIZE; i++) {
 				const net = new window.brain.NeuralNetwork({
 					hiddenLayers: [16, 16],
@@ -1811,14 +1811,14 @@
 					net.colorDisplay = individualColors[i % individualColors.length];
 					neuralNetworks.push(net);
 				} catch (e) {
-					console.error(\`Error during initial dummy training for network \${i}:\`, e);
+					console.error(`Error during initial dummy training for network ${i}:`, e);
 					allInitialized = false;
 					break;
 				}
 			}
 
 			if (allInitialized && neuralNetworks.length === POPULATION_SIZE) {
-				console.log(\`\${POPULATION_SIZE} new neural networks created and initialized.\`);
+				console.log(`${POPULATION_SIZE} new neural networks created and initialized.`);
 				if (statusMessageSpan) statusMessageSpan.textContent = "Prêt (Nouvelle population de réseaux)";
 			} else {
 				neuralNetworks = [];
