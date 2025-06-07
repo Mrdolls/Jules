@@ -47,14 +47,6 @@
 </head>
 
 <body class="bg-gradient-to-br from-gray-900 to-black min-h-screen flex items-center justify-center p-4 font-sans relative">
-	<div id="loadingOverlay" class="fixed inset-0 bg-gray-900 bg-opacity-75 flex flex-col items-center justify-center z-50 hidden">
-        <div class="bg-gray-700 p-6 rounded-lg shadow-xl text-center w-11/12 md:w-1/2 lg:w-1/3">
-            <p id="loadingText" class="text-xl font-semibold text-gray-100 mb-4">Chargement de la nouvelle génération...</p>
-            <div id="progressBarContainer" class="w-full bg-gray-600 rounded-full h-6 overflow-hidden shadow-inner">
-                <div id="progressBar" class="bg-blue-500 h-6 rounded-full transition-all duration-300 ease-in-out" style="width: 0%;"></div>
-            </div>
-        </div>
-    </div>
 	<div class="bg-gray-800 p-8 rounded-xl shadow-2xl w-full max-w-5xl flex flex-col md:flex-row gap-8 text-gray-100">
 		<!-- Controls and Information -->
 		<div class="flex-1 flex flex-col gap-4">
@@ -357,10 +349,6 @@
 		const statusMessageSpan = document.getElementById('statusMessage');
 		const maxWavesDisplay = document.getElementById('maxWavesDisplay');
 		const epsilonDisplay = document.getElementById('epsilonDisplay');
-
-        const loadingOverlay = document.getElementById('loadingOverlay');
-        const progressBar = document.getElementById('progressBar');
-        const loadingText = document.getElementById('loadingText');
 
 		// Settings Panel Elements
 		const settingsButton = document.getElementById('settingsButton');
@@ -1329,7 +1317,6 @@
 		}
 
 		function stopTraining() {
-			if (loadingOverlay) loadingOverlay.classList.add('hidden');
 			isTraining = false;
 			if (startButton) {
 				startButton.textContent = "Lancer l'entraînement";
@@ -1347,15 +1334,11 @@
 		async function processEndOfGenerationEvaluation() {
 			console.log(`[processEndOfGenEval] End of Gen. ${currentGeneration} evaluation. Training networks...`);
 
-			if (loadingOverlay) loadingOverlay.classList.remove('hidden');
-			if (progressBar) progressBar.style.width = '0%';
-			if (loadingText) loadingText.textContent = `Préparation de la nouvelle génération...`;
+			isTraining = false;
 
-    // Mettre isTraining à false APRÈS s'être assuré que la barre est visible
-    isTraining = false;
-
-			let totalSteps = POPULATION_SIZE * 2; // 1 pour training, 1 pour creation
-			let completedSteps = 0;
+			// Lines related to loading bar are removed from here.
+			// let totalSteps = POPULATION_SIZE * 2;
+			// let completedSteps = 0;
 
 			for (let i = 0; i < POPULATION_SIZE; i++) {
 				const network = neuralNetworks[i];
@@ -1369,10 +1352,6 @@
 							learningRate: 0.1,
 							timeout: 500
 						});
-						completedSteps++;
-						let percentage = (completedSteps / totalSteps) * 100;
-						if (progressBar) progressBar.style.width = percentage + '%';
-						if (loadingText) loadingText.textContent = `Entraînement des réseaux... ${percentage.toFixed(0)}%`;
 					} catch (e) {
 						console.error(`Training error Ind. ${i} Gen. ${currentGeneration}:`, e);
 					}
@@ -1437,8 +1416,8 @@
 			}
 
 			// completedSteps ne change pas ici, on met à jour juste le texte
-			let currentPercentageBeforeNewGen = (completedSteps / totalSteps) * 100;
-			if (loadingText) loadingText.textContent = `Création de la nouvelle génération... ${currentPercentageBeforeNewGen.toFixed(0)}%`;
+			// let currentPercentageBeforeNewGen = (completedSteps / totalSteps) * 100;
+			// if (loadingText) loadingText.textContent = `Création de la nouvelle génération... ${currentPercentageBeforeNewGen.toFixed(0)}%`;
 
 			const newNeuralNetworks = [];
 			for (let i = 0; i < POPULATION_SIZE; i++) {
@@ -1469,10 +1448,10 @@
 						net.colorDisplay = individualColors[i % individualColors.length];
 					}
 					newNeuralNetworks.push(net);
-					completedSteps++;
-					percentage = (completedSteps / totalSteps) * 100; // 'percentage' est déjà déclaré avec let plus haut
-					if (progressBar) progressBar.style.width = percentage + '%';
-					if (loadingText) loadingText.textContent = `Création de la nouvelle génération... ${percentage.toFixed(0)}%`;
+					// completedSteps++;
+					// percentage = (completedSteps / totalSteps) * 100; // 'percentage' est déjà déclaré avec let plus haut
+					// if (progressBar) progressBar.style.width = percentage + '%';
+					// if (loadingText) loadingText.textContent = `Création de la nouvelle génération... ${percentage.toFixed(0)}%`;
 				} catch (e) {
 					console.error(`fromJSON error for individual ${i}, using fallback.`, e, netJSON);
 					const fallbackNet = new window.brain.NeuralNetwork({ hiddenLayers: [16, 16], activation: 'sigmoid' });
@@ -1488,51 +1467,41 @@
 			currentGeneration++;
 			displayedIndividualIndex = 0; // Reset display index for the new generation
 
-			if (progressBar) progressBar.style.width = '100%';
-			if (loadingText) loadingText.textContent = `Terminé ! Reprise...`;
+			// Code original qui était à la fin de la fonction pour continuer ou arrêter l'entraînement
+			if (currentGeneration > MAX_WAVES) {
+				console.log("[processEndOfGenEval] Maximum number of generations reached.");
+				endTrainingSession(); // endTrainingSession s'occupera de masquer l'overlay au cas où.
+				return;
+			}
 
-			setTimeout(() => {
-				if (loadingOverlay) loadingOverlay.classList.add('hidden');
+			isTraining = true; // S'assurer que cela est bien défini avant de continuer
 
-				// Code original qui était à la fin de la fonction pour continuer ou arrêter l'entraînement
-				if (currentGeneration > MAX_WAVES) {
-					console.log("[processEndOfGenEval] Maximum number of generations reached.");
-					endTrainingSession(); // endTrainingSession s'occupera de masquer l'overlay au cas où.
-					return;
-				}
+			console.log(`[processEndOfGenEval] Preparing Generation ${currentGeneration}. Displayed individual: 0 (Champion)`);
+			// ... (le reste du code de préparation de la nouvelle génération qui était déjà là) ...
+			// initGame, epsilon update etc.
 
-				isTraining = true; // S'assurer que cela est bien défini avant de continuer
+			// Assurez-vous que toutes les initialisations sont faites avant de masquer complètement
+			// et de relancer. Le setTimeout englobe maintenant la reprise.
 
-				console.log(`[processEndOfGenEval] Preparing Generation ${currentGeneration}. Displayed individual: 0 (Champion)`);
-				// ... (le reste du code de préparation de la nouvelle génération qui était déjà là) ...
-				// initGame, epsilon update etc.
+			currentStepInGeneration = 0;
+			currentWaveScores = new Array(POPULATION_SIZE).fill(0);
+			for (let i = 0; i < POPULATION_SIZE; i++) {
+				populationTrainingData[i] = [];
+			}
 
-				// Assurez-vous que toutes les initialisations sont faites avant de masquer complètement
-				// et de relancer. Le setTimeout englobe maintenant la reprise.
+			generateCirclesForGeneration(INITIAL_CIRCLES);
+			for (let i = 0; i < POPULATION_SIZE; i++) {
+				initGame(i); // S'assurer que initGame est appelé avant de potentiellement dessiner
+			}
 
-				currentStepInGeneration = 0;
-				currentWaveScores = new Array(POPULATION_SIZE).fill(0);
-				for (let i = 0; i < POPULATION_SIZE; i++) {
-					populationTrainingData[i] = [];
-				}
+			if (MAX_WAVES > 1) {
+				epsilon = Math.max(finalEpsilon, initialEpsilon - (initialEpsilon - finalEpsilon) * ((currentGeneration - 1) / (MAX_WAVES - 1)));
+			} else {
+				epsilon = finalEpsilon;
+			}
+			if (epsilonDisplay) epsilonDisplay.textContent = epsilon.toFixed(2);
 
-				generateCirclesForGeneration(INITIAL_CIRCLES);
-				for (let i = 0; i < POPULATION_SIZE; i++) {
-					initGame(i); // S'assurer que initGame est appelé avant de potentiellement dessiner
-				}
-
-				if (MAX_WAVES > 1) {
-					epsilon = Math.max(finalEpsilon, initialEpsilon - (initialEpsilon - finalEpsilon) * ((currentGeneration - 1) / (MAX_WAVES - 1)));
-				} else {
-					epsilon = finalEpsilon;
-				}
-				if (epsilonDisplay) epsilonDisplay.textContent = epsilon.toFixed(2);
-
-				if (isTraining) { // Vérifier à nouveau au cas où stopTraining aurait été appelé pendant le timeout
-					 runGenerationEvaluationStep();
-				}
-
-			}, 750); // Délai pour que l'utilisateur voie "Terminé !"
+			runGenerationEvaluationStep();
 		}
 
 		function crossover(networkJSON1, networkJSON2) {
@@ -1662,7 +1631,6 @@
 		}
 
 		function endTrainingSession() {
-			if (loadingOverlay) loadingOverlay.classList.add('hidden');
 			isTraining = false;
 			if (statusMessageSpan) {
 				statusMessageSpan.textContent = "Entraînement terminé ! (Max Générations)";
