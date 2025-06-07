@@ -651,7 +651,7 @@ function calculateReward(action, inputs, individualIndex, moveDx, moveDy) {
         stepsSinceLastCollection.length > individualIndex &&
         stepsSinceLastCollection[individualIndex] > MAX_STEPS_WITHOUT_COLLECTION) {
         reward += PENALTY_NO_COLLECTION_SOON; // PENALTY_NO_COLLECTION_SOON est une valeur négative
-        // console.log(`Ind ${individualIndex}: Pénalité d'impatience! Steps: ${stepsSinceLastCollection[individualIndex]}, Reward +${PENALTY_NO_COLLECTION_SOON}`);
+        // console.log(\`Ind \${individualIndex}: Pénalité d'impatience! Steps: \${stepsSinceLastCollection[individualIndex]}, Reward +\${PENALTY_NO_COLLECTION_SOON}\`);
     }
 
     const currentDistanceToCircle = inputs.distanceToClosestCircle; // Existant
@@ -689,10 +689,10 @@ function calculateReward(action, inputs, individualIndex, moveDx, moveDy) {
 
             if (dotProduct > HEADING_THRESHOLD_POSITIVE) {
                 reward += NEW_REWARD_DIRECT_HEADING;
-                // console.log(`Ind ${individualIndex}: Bonne direction! Reward +${NEW_REWARD_DIRECT_HEADING}`);
+                // console.log(\`Ind \${individualIndex}: Bonne direction! Reward +\${NEW_REWARD_DIRECT_HEADING}\`);
             } else if (dotProduct < HEADING_THRESHOLD_NEGATIVE) {
                 reward -= NEW_PENALTY_WRONG_HEADING; // Soustraire la pénalité
-                // console.log(`Ind ${individualIndex}: Mauvaise direction! Penalty -${NEW_PENALTY_WRONG_HEADING}`);
+                // console.log(\`Ind \${individualIndex}: Mauvaise direction! Penalty -\${NEW_PENALTY_WRONG_HEADING}\`);
             }
         }
     }
@@ -715,7 +715,7 @@ function calculateReward(action, inputs, individualIndex, moveDx, moveDy) {
              reward -= REWARD_MOVE_TOWARDS_CIRCLE * 0.5; // Existant
          }
     } else {
-        // console.warn(`[calculateReward] currentIndLastSquarePos ou currentIndSquare non défini pour l'individu ${individualIndex}`);
+        // console.warn(\`[calculateReward] currentIndLastSquarePos ou currentIndSquare non défini pour l'individu \${individualIndex}\`);
     }
 
 
@@ -934,7 +934,7 @@ async function processEndOfGenerationEvaluation() {
     } else if (childrenNeeded > 0) {
          console.warn("[processEndOfGenEval] Pas de réseaux valides pour la reproduction. Remplissage avec de nouveaux réseaux (non entraînés).");
          for (let i = 0; i < childrenNeeded; i++) {
-             const tempNet = new brain.NeuralNetwork({hiddenLayers: [12,12], activation: 'sigmoid'});
+             const tempNet = new brain.NeuralNetwork({hiddenLayers: [16,16], activation: 'sigmoid'}); // MODIFIED hiddenLayers
              // Ces nouveaux réseaux ne sont pas "mutés" dans ce cycle de reproduction.
              nextGenerationData.push({ json: tempNet.toJSON(), wasMutated: false }); // Nouveau
          }
@@ -948,7 +948,7 @@ async function processEndOfGenerationEvaluation() {
 
         if (!networkDataEntry || !networkDataEntry.json) {
             console.warn(`[processEndOfGenEval] Manque de JSON pour l'individu \${i}, création d'un nouveau réseau.`);
-            const tempNet = new brain.NeuralNetwork({hiddenLayers: [12,12], activation: 'sigmoid'});
+            const tempNet = new brain.NeuralNetwork({hiddenLayers: [16,16], activation: 'sigmoid'}); // MODIFIED hiddenLayers
             netJSON = tempNet.toJSON();
             // On considère ce nouveau réseau comme non-muté dans ce cycle
             networkDataEntry = { json: netJSON, wasMutated: false };
@@ -973,7 +973,7 @@ async function processEndOfGenerationEvaluation() {
             newNeuralNetworks.push(net);
         } catch(e) {
             console.error(`Erreur fromJSON pour l'individu \${i}, utilisation d'un fallback.`, e, netJSON);
-            const fallbackNet = new window.brain.NeuralNetwork({hiddenLayers: [12,12], activation: 'sigmoid'});
+            const fallbackNet = new window.brain.NeuralNetwork({hiddenLayers: [16,16], activation: 'sigmoid'}); // MODIFIED hiddenLayers
             fallbackNet.wasMutatedThisGeneration = false; // Non muté par défaut
             fallbackNet.colorDisplay = individualColors[i % individualColors.length]; // Couleur normale pour fallback
             newNeuralNetworks.push(fallbackNet);
@@ -1201,7 +1201,7 @@ function endTrainingSession() {
     updateUI();
 }
 
-        function updateUI() {
+function updateUI() {
     // Ensure displayedIndividualIndex is valid before accessing arrays
     const displayIdx = (displayedIndividualIndex >= 0 && displayedIndividualIndex < POPULATION_SIZE) ? displayedIndividualIndex : 0;
 
@@ -1215,8 +1215,9 @@ function endTrainingSession() {
     waveNumberSpan.textContent = currentGeneration;
     epsilonDisplay.textContent = epsilon.toFixed(2);
 
-    // currentIndividualDisplaySpan logic removed as per request
+    // The old currentIndividualDisplaySpan logic is removed.
 
+    // Add the new status message logic:
     if (isTraining && currentStepInGeneration > 0 && currentStepInGeneration <= STEPS_PER_GENERATION_EVALUATION) {
         statusMessageSpan.textContent = `Gén. ${currentGeneration}, Ind. ${displayIdx + 1}/${POPULATION_SIZE}, Étape ${currentStepInGeneration}/${STEPS_PER_GENERATION_EVALUATION}`;
     }
@@ -1287,7 +1288,7 @@ async function createNewNeuralNetwork() {
     console.log(`[createNewNeuralNetwork] Initialisation de ${POPULATION_SIZE} nouveaux réseaux.`);
     for (let i = 0; i < POPULATION_SIZE; i++) {
         const net = new window.brain.NeuralNetwork({
-            hiddenLayers: [12, 12],
+            hiddenLayers: [16, 16], // MODIFIÉ ICI
             activation: 'sigmoid',
         });
 
@@ -1299,7 +1300,7 @@ async function createNewNeuralNetwork() {
             };
             const dummyOutput = { idle: 0, up: 0, down: 0, left: 0, right: 0 };
             OUTPUT_ACTIONS.forEach(action => dummyOutput[action] = 0);
-            dummyOutput.idle = 1;
+            dummyOutput[action] = 1; // Corrected: set a default action, e.g. idle
 
             await net.train([{ input: dummyInput, output: dummyOutput }], {
                 iterations: 1, errorThresh: 0.9, log: false, learningRate: 0.01, timeout: 100 // Short timeout for dummy
@@ -1329,5 +1330,3 @@ async function createNewNeuralNetwork() {
     </script>
 </body>
 </html>
-
-[end of neural_trainer.html]
