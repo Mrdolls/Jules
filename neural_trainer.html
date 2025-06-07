@@ -39,10 +39,7 @@
                 <p class="text-gray-700 text-sm"><span class="font-semibold">Epsilon (Exploration):</span> <span id="epsilonDisplay" class="font-bold text-teal-600">N/A</span></p>
             </div>
 
-            <button id="toggleGhostDisplayButton"
-                    class="bg-sky-500 hover:bg-sky-600 text-white font-bold py-2 px-4 rounded-lg shadow-md transition duration-300 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-sky-400 focus:ring-opacity-75 mt-2">
-                Afficher Fantômes
-            </button>
+            <!-- toggleGhostDisplayButton a été supprimé d'ici -->
 
     <!-- NOUVEAUX ÉLÉMENTS POUR LE CHARGEMENT DE FICHIER -->
     <div class="mt-4 pt-4 border-t border-gray-200">
@@ -86,7 +83,7 @@
         const SQUARE_SIZE = 25;
         const CIRCLE_RADIUS = 10;
         const INITIAL_CIRCLES = 5;
-        const WAVE_DURATION = 5000; // 5 secondes en millisecondes pour une vague (génération)
+        const WAVE_DURATION = 5000;
         const MAX_WAVES = 100;
 
         // Récompenses et pénalités
@@ -94,12 +91,8 @@
         const PENALTY_IDLE = -0.05;
         const PENALTY_WALL_COLLISION = -1;
         const REWARD_MOVE_TOWARDS_CIRCLE = 0.2;
-
-        // Nouvelles constantes pour la récompense de direction
         const NEW_REWARD_DIRECT_HEADING = 0.5;
         const NEW_PENALTY_WRONG_HEADING = 0.25;
-
-        // Constantes pour le mécanisme d'impatience
         const MAX_STEPS_WITHOUT_COLLECTION = 75;
         const PENALTY_NO_COLLECTION_SOON = -0.5;
 
@@ -146,7 +139,7 @@
 
         let isTraining = false;
         let gameLoopId;
-        let showGhostIndividuals = false;
+        let showGhostIndividuals = true; // MODIFIÉ: valeur par défaut à true
         let overallBestScore = -Infinity;
 
         // Variables pour la gestion de l'inertie du focus en mode fantôme
@@ -155,14 +148,12 @@
         let framesAsCandidate = 0;
         const FOCUS_CHANGE_THRESHOLD_FRAMES = 15;
 
-        // Exploration (Epsilon-greedy)
         let epsilon = 0.5;
         const initialEpsilon = 0.5;
         const finalEpsilon = 0.01;
 
         const OUTPUT_ACTIONS = ['idle', 'up', 'down', 'left', 'right'];
 
-        // Éléments DOM
         const startButton = document.getElementById('startButton');
         const waveNumberSpan = document.getElementById('waveNumber');
         const currentScoreSpan = document.getElementById('currentScore');
@@ -189,7 +180,7 @@
                 if (typeof brain === 'undefined') {
                     console.error("Brain.js n\'est pas correctement chargé sur l\'objet window.");
                     statusMessageSpan.textContent = "Erreur critique: Brain.js non trouvé.";
-                    statusMessageSpan.className = 'font-bold text-red-600'; // className update
+                    statusMessageSpan.className = 'font-bold text-red-600';
                     startButton.disabled = true;
                     return;
                 }
@@ -198,47 +189,11 @@
 
                 startButton.disabled = false;
                 statusMessageSpan.textContent = "Prêt à commencer l\'entraînement.";
-                statusMessageSpan.className = 'font-bold text-green-600'; // className update
+                statusMessageSpan.className = 'font-bold text-green-600';
 
                 startButton.addEventListener('click', toggleTraining);
 
-                const toggleGhostDisplayButton = document.getElementById('toggleGhostDisplayButton');
-                if (toggleGhostDisplayButton) {
-                    toggleGhostDisplayButton.addEventListener('click', () => {
-                        showGhostIndividuals = !showGhostIndividuals;
-
-                        if (showGhostIndividuals) {
-                            toggleGhostDisplayButton.textContent = 'Cacher Fantômes';
-                            toggleGhostDisplayButton.classList.remove('bg-sky-500', 'hover:bg-sky-600', 'focus:ring-sky-400');
-                            toggleGhostDisplayButton.classList.add('bg-amber-500', 'hover:bg-amber-600', 'focus:ring-amber-400');
-
-                            if (Array.isArray(currentWaveScores) && currentWaveScores.length === POPULATION_SIZE) {
-                                let bestScore = -Infinity;
-                                let bestIndex = 0;
-                                for (let i = 0; i < POPULATION_SIZE; i++) {
-                                    if (currentWaveScores[i] > bestScore) {
-                                        bestScore = currentWaveScores[i];
-                                        bestIndex = i;
-                                    }
-                                }
-                                currentFocusedIndividual = bestIndex;
-                                candidateForFocus = bestIndex;
-                                framesAsCandidate = FOCUS_CHANGE_THRESHOLD_FRAMES;
-                            } else {
-                                currentFocusedIndividual = displayedIndividualIndex;
-                                candidateForFocus = displayedIndividualIndex;
-                                framesAsCandidate = 0;
-                            }
-                        } else {
-                            toggleGhostDisplayButton.textContent = 'Afficher Fantômes';
-                            toggleGhostDisplayButton.classList.remove('bg-amber-500', 'hover:bg-amber-600', 'focus:ring-amber-400');
-                            toggleGhostDisplayButton.classList.add('bg-sky-500', 'hover:bg-sky-600', 'focus:ring-sky-400');
-                        }
-                        if (!isTraining && ctx && typeof draw === 'function') {
-                            draw();
-                        }
-                    });
-                }
+                // Logique du bouton toggleGhostDisplayButton supprimée
 
                 const uploadWeightsFile = document.getElementById('uploadWeightsFile');
                 const loadJsonToInd0Button = document.getElementById('loadJsonToInd0Button');
@@ -309,7 +264,7 @@
             };
             brainScript.onerror = () => {
                 statusMessageSpan.textContent = "Erreur de chargement de Brain.js. Veuillez vérifier votre connexion et réessayer.";
-                statusMessageSpan.className = 'font-bold text-red-600'; // className update
+                statusMessageSpan.className = 'font-bold text-red-600';
                 console.error("Failed to load brain.js script.");
                 startButton.disabled = true;
             };
@@ -493,10 +448,10 @@ function draw() {
             const ghostSquare = squares[i];
             const ghostNetwork = neuralNetworks[i];
             if (ghostSquare && ghostNetwork && ghostNetwork.colorDisplay) {
-                let ghostColor = ghostNetwork.colorDisplay.replace(/, ?\d+(\.\d+)?\)/, ', 0.05)');
+                let ghostColor = ghostNetwork.colorDisplay.replace(/, ?\d+(\.\d+)?\)/, ', 0.25)'); // MODIFIÉ: Opacité à 0.25
                 if (!ghostColor.includes('rgba')) {
                     if (ghostColor.startsWith('rgb(')) {
-                        ghostColor = ghostColor.replace('rgb(', 'rgba(').replace(')', ', 0.05)');
+                        ghostColor = ghostColor.replace('rgb(', 'rgba(').replace(')', ', 0.25)'); // MODIFIÉ: Opacité à 0.25
                     }
                 }
                 ctx.fillStyle = ghostColor;
@@ -792,13 +747,6 @@ function startTraining() {
         populationTrainingData[i] = [];
     }
 
-    // Ligne supprimée/commentée pour statusMessageSpan.textContent
-    // if(statusMessageSpan) {
-    //     statusMessageSpan.textContent = `Initialisation Gén. ${currentGeneration}, Ind. ${displayedIndividualIndex + 1}/${POPULATION_SIZE}...`;
-    //     statusMessageSpan.classList.remove('text-yellow-600', 'text-green-600', 'text-purple-600');
-    //     statusMessageSpan.classList.add('text-blue-600');
-    // }
-
     generateCirclesForGeneration(INITIAL_CIRCLES);
 
     for (let i = 0; i < POPULATION_SIZE; i++) {
@@ -837,11 +785,7 @@ function stopTraining() {
 }
 
 async function processEndOfGenerationEvaluation() {
-    // Ligne supprimée/commentée pour statusMessageSpan.textContent
-    // console.log(`[processEndOfGenEval] Fin évaluation Gén. ${currentGeneration}. Entraînement des réseaux...`);
-    // if(statusMessageSpan) statusMessageSpan.textContent = `Gén. ${currentGeneration} terminée. Entraînement IA...`;
     console.log(`[processEndOfGenEval] Fin évaluation Gén. ${currentGeneration}. Entraînement des réseaux...`);
-
 
     isTraining = false;
 
@@ -991,8 +935,6 @@ async function processEndOfGenerationEvaluation() {
     }
     if(epsilonDisplay) epsilonDisplay.textContent = epsilon.toFixed(2);
 
-    // Ligne supprimée/commentée pour statusMessageSpan.textContent
-    // if(statusMessageSpan) statusMessageSpan.textContent = `Prêt pour Gén. ${currentGeneration}, Ind. ${displayedIndividualIndex + 1}/${POPULATION_SIZE}...`;
     updateUI();
 
     runGenerationEvaluationStep();
