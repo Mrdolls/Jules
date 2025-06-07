@@ -242,8 +242,8 @@
                 }
 
                 // Initialize lastSquarePosition only if square is defined (after initGame)
-                if (square) {
-                    lastSquarePosition = { x: square.x, y: square.y };
+                if (square) { // This should be squares[displayedIndividualIndex] or similar
+                    lastSquarePosition = { x: squares[displayedIndividualIndex].x, y: squares[displayedIndividualIndex].y };
                 }
             };
             brainScript.onerror = () => {
@@ -809,7 +809,7 @@ function startTraining() {
     }
     // lastSquarePositions will be initialized by initGame
     if(statusMessageSpan) {
-        statusMessageSpan.textContent = `Initialisation Gén. \${currentGeneration}, Ind. \${displayedIndividualIndex + 1}/\${POPULATION_SIZE}...`;
+        statusMessageSpan.textContent = `Initialisation Gén. ${currentGeneration}, Ind. ${displayedIndividualIndex + 1}/${POPULATION_SIZE}...`;
         statusMessageSpan.classList.remove('text-yellow-600', 'text-green-600', 'text-purple-600');
         statusMessageSpan.classList.add('text-blue-600');
     }
@@ -858,35 +858,31 @@ function stopTraining() { // Called when user manually stops
 // Removed startNextWave() as it's obsolete.
 
 async function processEndOfGenerationEvaluation() {
-    console.log(`[processEndOfGenEval] Fin évaluation Gén. \${currentGeneration}. Entraînement des réseaux...`);
-    if(statusMessageSpan) statusMessageSpan.textContent = `Gén. \${currentGeneration} terminée. Entraînement IA...`;
+    console.log(`[processEndOfGenEval] Fin évaluation Gén. ${currentGeneration}. Entraînement des réseaux...`);
+    if(statusMessageSpan) statusMessageSpan.textContent = `Gén. ${currentGeneration} terminée. Entraînement IA...`;
 
-    isTraining = false; // Pause the runGenerationEvaluationStep loop by its check
+    isTraining = false;
 
-    // 1. Train each network and collect final scores
     for (let i = 0; i < POPULATION_SIZE; i++) {
         const network = neuralNetworks[i];
         const trainingSet = populationTrainingData[i];
-
         if (trainingSet && trainingSet.length > 0 && network && typeof network.train === 'function') {
             try {
-                // console.log(\`[processEndOfGenEval] Entraînement Ind. \${i} avec \${trainingSet.length} points.\`);
                 await network.train(trainingSet, {
                     iterations: 50,
                     errorThresh: 0.05,
                     log: false,
-                    learningRate: 0.1, // These are example training opts, can be tuned
-                    timeout: 500 // Shorter timeout for individual training within a generation
+                    learningRate: 0.1,
+                    timeout: 500
                 });
             } catch (e) {
-                console.error(`Erreur entraînement Ind. \${i} Gén. \${currentGeneration}:`, e);
+                console.error(`Erreur entraînement Ind. ${i} Gén. ${currentGeneration}:`, e);
             }
         }
         individualScores[i] = currentWaveScores[i];
     }
-    console.log(`[processEndOfGenEval] Scores finaux Gén. \${currentGeneration}: [\${individualScores.map(s => s.toFixed(2)).join(', ')}]`);
+    console.log(`[processEndOfGenEval] Scores finaux Gén. ${currentGeneration}: [${individualScores.map(s => s.toFixed(2)).join(', ')}]`);
 
-    // 2. Genetic Algorithm
     let scoredNetworks = neuralNetworks.map((net, index) => ({
         index: index,
         score: individualScores[index],
@@ -897,15 +893,12 @@ async function processEndOfGenerationEvaluation() {
     console.log("[processEndOfGenEval] Top 5 individus (index original, score):",
                 scoredNetworks.slice(0, 5).map(s => ({idx: s.index, score: s.score.toFixed(2)})));
 
-    let nextGenerationData = []; // Nouvelle initialisation pour stocker objets {json, wasMutated}
+    let nextGenerationData = [];
 
-    // Elitism
     for (let i = 0; i < ELITISM_COUNT && i < scoredNetworks.length; i++) {
-        // console.log(\`[processEndOfGenEval] Élite \${i+1}: Ind. original \${scoredNetworks[i].index} (Score: \${scoredNetworks[i].score.toFixed(2)})\`);
-        nextGenerationData.push({ json: scoredNetworks[i].networkJSON, wasMutated: false }); // Nouveau
+        nextGenerationData.push({ json: scoredNetworks[i].networkJSON, wasMutated: false });
     }
 
-    // Crossover & Mutation for the rest
     let childrenNeeded = POPULATION_SIZE - nextGenerationData.length;
     if (scoredNetworks.length > 0 && childrenNeeded > 0) {
         const bestParentJSON = scoredNetworks[0].networkJSON;
@@ -914,43 +907,39 @@ async function processEndOfGenerationEvaluation() {
             if (parent2Index >= scoredNetworks.length || parent2Index === 0) {
                  parent2Index = (scoredNetworks.length > 1) ? 1 : 0;
             }
-            if (scoredNetworks.length > 1 && parent2Index === 0 && scoredNetworks[0].index === scoredNetworks[parent2Index].index ) parent2Index = 1; // Ensure different parent if possible
+            if (scoredNetworks.length > 1 && parent2Index === 0 && scoredNetworks[0].index === scoredNetworks[parent2Index].index ) parent2Index = 1;
 
-            const parent2JSON = scoredNetworks[parent2Index] ? scoredNetworks[parent2Index].networkJSON : bestParentJSON; // Fallback for safety
-            // console.log(\`[processEndOfGenEval] Croisement enfant \${i}: Elite 0 avec Ind. original \${scoredNetworks[parent2Index] ? scoredNetworks[parent2Index].index : scoredNetworks[0].index}\`);
+            const parent2JSON = scoredNetworks[parent2Index] ? scoredNetworks[parent2Index].networkJSON : bestParentJSON;
             let childJson = crossover(bestParentJSON, parent2JSON);
-            let childMutationResult; // Renamed from childMutationStatus for clarity
+            let childMutationResult;
 
             if (childJson) {
                 childMutationResult = mutate(childJson, MUTATION_RATE, MUTATION_AMOUNT);
-                nextGenerationData.push({ json: childMutationResult.mutatedJson, wasMutated: childMutationResult.didMutate }); // Nouveau
+                nextGenerationData.push({ json: childMutationResult.mutatedJson, wasMutated: childMutationResult.didMutate });
             } else {
                 console.warn("[processEndOfGenEval] Crossover a retourné null, copie du meilleur parent (muté).");
                 let fallbackChildJson = JSON.parse(JSON.stringify(bestParentJSON));
                 childMutationResult = mutate(fallbackChildJson, MUTATION_RATE, MUTATION_AMOUNT);
-                nextGenerationData.push({ json: childMutationResult.mutatedJson, wasMutated: childMutationResult.didMutate }); // Nouveau
+                nextGenerationData.push({ json: childMutationResult.mutatedJson, wasMutated: childMutationResult.didMutate });
             }
         }
     } else if (childrenNeeded > 0) {
          console.warn("[processEndOfGenEval] Pas de réseaux valides pour la reproduction. Remplissage avec de nouveaux réseaux (non entraînés).");
          for (let i = 0; i < childrenNeeded; i++) {
-             const tempNet = new brain.NeuralNetwork({hiddenLayers: [16,16], activation: 'sigmoid'}); // MODIFIED hiddenLayers
-             // Ces nouveaux réseaux ne sont pas "mutés" dans ce cycle de reproduction.
-             nextGenerationData.push({ json: tempNet.toJSON(), wasMutated: false }); // Nouveau
+             const tempNet = new brain.NeuralNetwork({hiddenLayers: [16,16], activation: 'sigmoid'}); // MODIFIÉ
+             nextGenerationData.push({ json: tempNet.toJSON(), wasMutated: false });
          }
     }
 
-    // Repopulate neuralNetworks with new instances
     const newNeuralNetworks = [];
     for (let i = 0; i < POPULATION_SIZE; i++) {
-        let networkDataEntry = nextGenerationData[i]; // Récupérer l'objet {json, wasMutated}
+        let networkDataEntry = nextGenerationData[i];
         let netJSON;
 
         if (!networkDataEntry || !networkDataEntry.json) {
-            console.warn(`[processEndOfGenEval] Manque de JSON pour l'individu \${i}, création d'un nouveau réseau.`);
-            const tempNet = new brain.NeuralNetwork({hiddenLayers: [16,16], activation: 'sigmoid'}); // MODIFIED hiddenLayers
-            netJSON = tempNet.toJSON();
-            // On considère ce nouveau réseau comme non-muté dans ce cycle
+            console.warn(`[processEndOfGenEval] Manque de JSON pour l'individu ${i}, création d'un nouveau réseau.`);
+            const tempNetForFill = new brain.NeuralNetwork({hiddenLayers: [16,16], activation: 'sigmoid'}); // MODIFIÉ
+            netJSON = tempNetForFill.toJSON();
             networkDataEntry = { json: netJSON, wasMutated: false };
         } else {
             netJSON = networkDataEntry.json;
@@ -958,7 +947,7 @@ async function processEndOfGenerationEvaluation() {
 
         try {
             const net = new window.brain.NeuralNetwork().fromJSON(netJSON);
-            net.wasMutatedThisGeneration = networkDataEntry.wasMutated; // Déjà ajouté à l'étape 2
+            net.wasMutatedThisGeneration = networkDataEntry.wasMutated;
 
             if (net.wasMutatedThisGeneration) {
                 let newColorIndex = Math.floor(Math.random() * individualColors.length);
@@ -966,16 +955,16 @@ async function processEndOfGenerationEvaluation() {
                     newColorIndex = (newColorIndex + 1) % individualColors.length;
                 }
                 net.colorDisplay = individualColors[newColorIndex];
-                console.log(`Individu ${i} a muté et reçoit la nouvelle couleur : ${net.colorDisplay}`); // Log pour débogage
+                console.log(`Individu ${i} a muté et reçoit la nouvelle couleur : ${net.colorDisplay}`);
             } else {
                 net.colorDisplay = individualColors[i % individualColors.length];
             }
             newNeuralNetworks.push(net);
         } catch(e) {
-            console.error(`Erreur fromJSON pour l'individu \${i}, utilisation d'un fallback.`, e, netJSON);
-            const fallbackNet = new window.brain.NeuralNetwork({hiddenLayers: [16,16], activation: 'sigmoid'}); // MODIFIED hiddenLayers
-            fallbackNet.wasMutatedThisGeneration = false; // Non muté par défaut
-            fallbackNet.colorDisplay = individualColors[i % individualColors.length]; // Couleur normale pour fallback
+            console.error(`Erreur fromJSON pour l'individu ${i}, utilisation d'un fallback.`, e, netJSON);
+            const fallbackNet = new window.brain.NeuralNetwork({hiddenLayers: [16,16], activation: 'sigmoid'}); // MODIFIÉ
+            fallbackNet.wasMutatedThisGeneration = false;
+            fallbackNet.colorDisplay = individualColors[i % individualColors.length];
             newNeuralNetworks.push(fallbackNet);
         }
     }
@@ -983,19 +972,18 @@ async function processEndOfGenerationEvaluation() {
 
     savePopulation();
 
-    // 3. Prepare for Next Generation or End Training
     currentGeneration++;
-    displayedIndividualIndex = 0; // Champion of new generation is at index 0
+    displayedIndividualIndex = 0;
 
     if (currentGeneration > MAX_WAVES) {
         console.log("[processEndOfGenEval] Nombre maximum de générations atteint.");
-        endTrainingSession(); // This will set isTraining = false
+        endTrainingSession();
         return;
     }
 
-    isTraining = true; // Re-enable training for the next generation's evaluation steps
+    isTraining = true;
 
-    console.log(`[processEndOfGenEval] Préparation de la Génération \${currentGeneration}. Individu affiché: 0 (Champion)`);
+    console.log(`[processEndOfGenEval] Préparation de la Génération ${currentGeneration}. Individu affiché: 0 (Champion)`);
     currentStepInGeneration = 0;
     currentWaveScores = new Array(POPULATION_SIZE).fill(0);
     for (let i = 0; i < POPULATION_SIZE; i++) {
@@ -1014,7 +1002,7 @@ async function processEndOfGenerationEvaluation() {
     }
     if(epsilonDisplay) epsilonDisplay.textContent = epsilon.toFixed(2);
 
-    if(statusMessageSpan) statusMessageSpan.textContent = `Prêt pour Gén. \${currentGeneration}, Ind. \${displayedIndividualIndex + 1}/\${POPULATION_SIZE}...`; // Update status for new gen
+    if(statusMessageSpan) statusMessageSpan.textContent = `Prêt pour Gén. ${currentGeneration}, Ind. ${displayedIndividualIndex + 1}/${POPULATION_SIZE}...`;
     updateUI();
 
     runGenerationEvaluationStep();
@@ -1171,14 +1159,14 @@ function endTrainingSession() {
         startButton.classList.add('bg-green-600', 'hover:bg-green-700');
     }
     // currentGeneration was incremented *before* this call if MAX_WAVES was reached.
-    console.log(`[endTrainingSession] Entraînement complet terminé après \${currentGeneration - 1} générations.`);
+    console.log(`[endTrainingSession] Entraînement complet terminé après ${currentGeneration - 1} générations.`);
 
     // Sauvegarde du meilleur individu (l'élite à l'index 0 de la population actuelle)
     if (neuralNetworks && neuralNetworks.length > 0 && neuralNetworks[0]) {
         const bestNetwork = neuralNetworks[0]; // The champion of the last evaluated generation is at index 0
         const bestScore = individualScores[0]; // Corresponds to the score of the network that ended up at index 0 after sorting
 
-        console.log(`[endTrainingSession] Meilleur individu (élite actuelle): Index 0, Score approx.: \${bestScore ? bestScore.toFixed(2) : 'N/A'}`);
+        console.log(`[endTrainingSession] Meilleur individu (élite actuelle): Index 0, Score approx.: ${bestScore ? bestScore.toFixed(2) : 'N/A'}`);
         try {
             const bestNetJSON = bestNetwork.toJSON();
             const jsonString = JSON.stringify(bestNetJSON, null, 2);
@@ -1300,7 +1288,7 @@ async function createNewNeuralNetwork() {
             };
             const dummyOutput = { idle: 0, up: 0, down: 0, left: 0, right: 0 };
             OUTPUT_ACTIONS.forEach(action => dummyOutput[action] = 0);
-            dummyOutput[action] = 1; // Corrected: set a default action, e.g. idle
+            dummyOutput["idle"] = 1; // Corrected: set a default action, e.g. idle
 
             await net.train([{ input: dummyInput, output: dummyOutput }], {
                 iterations: 1, errorThresh: 0.9, log: false, learningRate: 0.01, timeout: 100 // Short timeout for dummy
