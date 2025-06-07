@@ -1349,7 +1349,7 @@
 
 			if (loadingOverlay) loadingOverlay.classList.remove('hidden');
 			if (progressBar) progressBar.style.width = '0%';
-			if (loadingText) loadingText.textContent = "Préparation de la nouvelle génération...";
+			if (loadingText) loadingText.textContent = `Préparation de la nouvelle génération...`;
 
 			let totalSteps = POPULATION_SIZE * 2; // 1 pour training, 1 pour creation
 			let completedSteps = 0;
@@ -1371,7 +1371,7 @@
 						completedSteps++;
 						let percentage = (completedSteps / totalSteps) * 100;
 						if (progressBar) progressBar.style.width = percentage + '%';
-						if (loadingText) loadingText.textContent = \`Entraînement des réseaux... \${percentage.toFixed(0)}%\`;
+						if (loadingText) loadingText.textContent = `Entraînement des réseaux... ${percentage.toFixed(0)}%`;
 					} catch (e) {
 						console.error(\`Training error Ind. \${i} Gen. \${currentGeneration}:\`, e);
 					}
@@ -1437,7 +1437,7 @@
 
 			// completedSteps ne change pas ici, on met à jour juste le texte
 			let currentPercentageBeforeNewGen = (completedSteps / totalSteps) * 100;
-			if (loadingText) loadingText.textContent = \`Création de la nouvelle génération... \${currentPercentageBeforeNewGen.toFixed(0)}%\`;
+			if (loadingText) loadingText.textContent = `Création de la nouvelle génération... ${currentPercentageBeforeNewGen.toFixed(0)}%`;
 
 			const newNeuralNetworks = [];
 			for (let i = 0; i < POPULATION_SIZE; i++) {
@@ -1471,7 +1471,7 @@
 					completedSteps++;
 					percentage = (completedSteps / totalSteps) * 100; // 'percentage' est déjà déclaré avec let plus haut
 					if (progressBar) progressBar.style.width = percentage + '%';
-					if (loadingText) loadingText.textContent = \`Création de la nouvelle génération... \${percentage.toFixed(0)}%\`;
+					if (loadingText) loadingText.textContent = `Création de la nouvelle génération... ${percentage.toFixed(0)}%`;
 				} catch (e) {
 					console.error(\`fromJSON error for individual \${i}, using fallback.\`, e, netJSON);
 					const fallbackNet = new window.brain.NeuralNetwork({ hiddenLayers: [16, 16], activation: 'sigmoid' });
@@ -1488,7 +1488,7 @@
 			displayedIndividualIndex = 0; // Reset display index for the new generation
 
 			if (progressBar) progressBar.style.width = '100%';
-			if (loadingText) loadingText.textContent = "Terminé ! Reprise...";
+			if (loadingText) loadingText.textContent = `Terminé ! Reprise...`;
 
 			setTimeout(() => {
 				if (loadingOverlay) loadingOverlay.classList.add('hidden');
