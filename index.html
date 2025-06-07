@@ -1,0 +1,1836 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Entraîneur de Réseau de Neurones</title>
+	<!-- Tailwind CSS CDN -->
+	<script src="https://cdn.tailwindcss.com"></script>
+	<!-- Brain.js will be loaded dynamically by JavaScript -->
+	<!-- Font Awesome for icons -->
+	<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+	<style>
+		/* Custom styles for the canvas to ensure it fits well */
+		canvas {
+			background-color: #333; /* Darker background for canvas */
+			border: 2px solid #6366f1; /* Adjusted border for dark theme - Purple-ish */
+			border-radius: 8px;
+			display: block;
+			margin: 0 auto;
+		}
+
+		body {
+			font-family: 'Inter', sans-serif;
+			/* Using Inter font as a common default */
+		}
+
+		/* Custom scrollbar for settings panel */
+		.settings-panel::-webkit-scrollbar {
+			width: 8px;
+		}
+
+		.settings-panel::-webkit-scrollbar-track {
+			background: #4a5568; /* Tailwind gray-700 */
+			border-radius: 10px;
+		}
+
+		.settings-panel::-webkit-scrollbar-thumb {
+			background: #6366f1; /* Tailwind indigo-500 */
+			border-radius: 10px;
+		}
+
+		.settings-panel::-webkit-scrollbar-thumb:hover {
+			background: #4f46e5; /* Tailwind indigo-600 */
+		}
+	</style>
+</head>
+
+<body class="bg-gradient-to-br from-gray-900 to-black min-h-screen flex items-center justify-center p-4 font-sans relative">
+	<div id="loadingOverlay" class="fixed inset-0 bg-gray-900 bg-opacity-75 flex flex-col items-center justify-center z-50 hidden">
+        <div class="bg-gray-700 p-6 rounded-lg shadow-xl text-center w-11/12 md:w-1/2 lg:w-1/3">
+            <p id="loadingText" class="text-xl font-semibold text-gray-100 mb-4">Chargement de la nouvelle génération...</p>
+            <div id="progressBarContainer" class="w-full bg-gray-600 rounded-full h-6 overflow-hidden shadow-inner">
+                <div id="progressBar" class="bg-blue-500 h-6 rounded-full transition-all duration-300 ease-in-out" style="width: 0%;"></div>
+            </div>
+        </div>
+    </div>
+	<div class="bg-gray-800 p-8 rounded-xl shadow-2xl w-full max-w-5xl flex flex-col md:flex-row gap-8 text-gray-100">
+		<!-- Controls and Information -->
+		<div class="flex-1 flex flex-col gap-4">
+			<h1 class="text-3xl font-bold text-gray-100 mb-4 text-center">Entraîneur de Réseau de Neurones</h1>
+
+			<button id="startButton" disabled
+				class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg shadow-md transition duration-300 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-75 disabled:opacity-50 disabled:cursor-not-allowed">
+				Lancer l'entraînement
+			</button>
+
+			<div class="mt-6 p-4 bg-gray-700 rounded-lg shadow-inner">
+				<p class="text-gray-200 text-lg mb-2"><span class="font-semibold">Vague actuelle:</span> <span
+						id="waveNumber" class="font-bold text-blue-400">0</span> / <span id="maxWavesDisplay">100</span>
+				</p>
+				<p class="text-gray-200 text-lg mb-2"><span class="font-semibold">Score de la vague:</span> <span
+						id="currentScore" class="font-bold text-purple-400">0</span></p>
+				<p class="text-gray-200 text-lg mb-1"><span class="font-semibold">Statut:</span> <span
+						id="statusMessage" class="font-bold text-yellow-400">Chargement...</span></p>
+				<p class="text-gray-200 text-sm"><span class="font-semibold">Epsilon (Exploration):</span> <span
+						id="epsilonDisplay" class="font-bold text-teal-400">N/A</span></p>
+			</div>
+
+			<!-- NEW ELEMENTS FOR FILE LOADING -->
+			<div class="mt-4 pt-4 border-t border-gray-600">
+				<label for="uploadWeightsFile" class="block text-sm font-medium text-gray-200">Charger poids pour
+					l'Individu 0 (JSON):</label>
+				<input type="file" id="uploadWeightsFile" accept=".json" class="mt-1 block w-full text-sm text-gray-300
+                                                                      file:mr-4 file:py-2 file:px-4
+                                                                      file:rounded-full file:border-0
+                                                                      file:text-sm file:font-semibold
+                                                                      file:bg-violet-50 file:text-violet-700
+                                                                      hover:file:bg-violet-100" />
+				<button id="loadJsonToInd0Button"
+					class="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg shadow-md transition duration-300 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:ring-opacity-75 mt-2 text-sm w-full">
+					Appliquer JSON à l'Individu 0
+				</button>
+			</div>
+			<!-- NEW ELEMENTS END -->
+		</div>
+
+		<!-- Game Area -->
+		<div class="flex-1 flex items-center justify-center">
+			<canvas id="gameCanvas" width="600" height="600"></canvas>
+		</div>
+	</div>
+
+	<!-- Settings Button -->
+	<button id="settingsButton" class="fixed top-4 right-4 p-3 bg-gray-700 rounded-full shadow-lg text-gray-200 hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 transition duration-300">
+		<i class="fas fa-cog text-xl"></i>
+	</button>
+
+	<!-- Settings Panel -->
+	<div id="settingsPanel" class="fixed top-0 right-0 h-full w-80 bg-gray-800 shadow-xl transform translate-x-full transition-transform duration-300 z-50 p-6 overflow-y-auto settings-panel">
+		<div class="flex justify-between items-center mb-6">
+			<h2 class="text-2xl font-bold text-gray-100">Paramètres</h2>
+			<button id="closeSettings" class="text-gray-400 hover:text-gray-100 focus:outline-none">
+				<i class="fas fa-times text-2xl"></i>
+			</button>
+		</div>
+
+		<div class="space-y-6">
+			<!-- Game Parameters -->
+			<div class="bg-gray-700 p-4 rounded-lg">
+				<h3 class="text-xl font-semibold mb-3 text-gray-100">Paramètres du Jeu</h3>
+				<div class="mb-2">
+					<label for="gameWidthInput" class="block text-sm font-medium text-gray-300">Largeur du Jeu:</label>
+					<input type="range" id="gameWidthInput" min="400" max="1000" value="600"
+						class="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer range-lg accent-blue-500">
+					<span id="gameWidthValue" class="text-sm text-gray-400">600</span>
+				</div>
+				<div class="mb-2">
+					<label for="gameHeightInput" class="block text-sm font-medium text-gray-300">Hauteur du Jeu:</label>
+					<input type="range" id="gameHeightInput" min="400" max="1000" value="600"
+						class="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer range-lg accent-blue-500">
+					<span id="gameHeightValue" class="text-sm text-gray-400">600</span>
+				</div>
+				<div class="mb-2">
+					<label for="squareSizeInput" class="block text-sm font-medium text-gray-300">Taille du Carré:</label>
+					<input type="number" id="squareSizeInput" min="10" max="50" value="25"
+						class="w-full p-2 bg-gray-900 border border-gray-600 rounded-md text-gray-100">
+				</div>
+				<div class="mb-2">
+					<label for="circleRadiusInput" class="block text-sm font-medium text-gray-300">Rayon des Cercles:</label>
+					<input type="number" id="circleRadiusInput" min="5" max="20" value="10"
+						class="w-full p-2 bg-gray-900 border border-gray-600 rounded-md text-gray-100">
+				</div>
+				<div class="mb-2">
+					<label for="initialCirclesInput" class="block text-sm font-medium text-gray-300">Cercles Initiaux:</label>
+					<input type="number" id="initialCirclesInput" min="1" max="20" value="5"
+						class="w-full p-2 bg-gray-900 border border-gray-600 rounded-md text-gray-100">
+				</div>
+				<div class="mb-2">
+					<label for="waveDurationInput" class="block text-sm font-medium text-gray-300">Durée Vague (ms):</label>
+					<input type="number" id="waveDurationInput" min="1000" max="10000" step="500" value="5000"
+						class="w-full p-2 bg-gray-900 border border-gray-600 rounded-md text-gray-100">
+				</div>
+				<div class="mb-2">
+					<label for="maxWavesInput" class="block text-sm font-medium text-gray-300">Max Vagues:</label>
+					<input type="number" id="maxWavesInput" min="1" max="500" value="100"
+						class="w-full p-2 bg-gray-900 border border-gray-600 rounded-md text-gray-100">
+				</div>
+			</div>
+
+			<!-- Rewards & Penalties -->
+			<div class="bg-gray-700 p-4 rounded-lg">
+				<h3 class="text-xl font-semibold mb-3 text-gray-100">Récompenses & Pénalités</h3>
+				<div class="mb-2">
+					<label for="rewardCollectCircleInput" class="block text-sm font-medium text-gray-300">Récompense Cercle:</label>
+					<input type="number" id="rewardCollectCircleInput" step="1" value="25"
+						class="w-full p-2 bg-gray-900 border border-gray-600 rounded-md text-gray-100">
+				</div>
+				<div class="mb-2">
+					<label for="penaltyIdleInput" class="block text-sm font-medium text-gray-300">Pénalité Inactivité:</label>
+					<input type="number" id="penaltyIdleInput" step="0.01" value="-0.05"
+						class="w-full p-2 bg-gray-900 border border-gray-600 rounded-md text-gray-100">
+				</div>
+				<div class="mb-2">
+					<label for="penaltyWallCollisionInput" class="block text-sm font-medium text-gray-300">Pénalité Collision Mur:</label>
+					<input type="number" id="penaltyWallCollisionInput" step="0.1" value="-1"
+						class="w-full p-2 bg-gray-900 border border-gray-600 rounded-md text-gray-100">
+				</div>
+				<div class="mb-2">
+					<label for="rewardMoveTowardsCircleInput" class="block text-sm font-medium text-gray-300">Récompense Mouvement Cercle:</label>
+					<input type="number" id="rewardMoveTowardsCircleInput" step="0.1" value="0.2"
+						class="w-full p-2 bg-gray-900 border border-gray-600 rounded-md text-gray-100">
+				</div>
+				<div class="mb-2">
+					<label for="newRewardDirectHeadingInput" class="block text-sm font-medium text-gray-300">Récompense Direction Directe:</label>
+					<input type="number" id="newRewardDirectHeadingInput" step="0.1" value="0.5"
+						class="w-full p-2 bg-gray-900 border border-gray-600 rounded-md text-gray-100">
+				</div>
+				<div class="mb-2">
+					<label for="newPenaltyWrongHeadingInput" class="block text-sm font-medium text-gray-300">Pénalité Mauvaise Direction:</label>
+					<input type="number" id="newPenaltyWrongHeadingInput" step="0.01" value="0.25"
+						class="w-full p-2 bg-gray-900 border border-gray-600 rounded-md text-gray-100">
+				</div>
+				<div class="mb-2">
+					<label for="maxStepsWithoutCollectionInput" class="block text-sm font-medium text-gray-300">Max Étapes Sans Collecte:</label>
+					<input type="number" id="maxStepsWithoutCollectionInput" step="1" value="75"
+						class="w-full p-2 bg-gray-900 border border-gray-600 rounded-md text-gray-100">
+				</div>
+				<div class="mb-2">
+					<label for="penaltyNoCollectionSoonInput" class="block text-sm font-medium text-gray-300">Pénalité Pas de Collecte Rapide:</label>
+					<input type="number" id="penaltyNoCollectionSoonInput" step="0.1" value="-0.5"
+						class="w-full p-2 bg-gray-900 border border-gray-600 rounded-md text-gray-100">
+				</div>
+			</div>
+
+			<!-- Genetic Algorithm Parameters -->
+			<div class="bg-gray-700 p-4 rounded-lg">
+				<h3 class="text-xl font-semibold mb-3 text-gray-100">Paramètres Algorithme Génétique</h3>
+				<div class="mb-2">
+					<label for="populationSizeInput" class="block text-sm font-medium text-gray-300">Taille Population:</label>
+					<input type="number" id="populationSizeInput" min="5" max="50" value="10"
+						class="w-full p-2 bg-gray-900 border border-gray-600 rounded-md text-gray-100">
+				</div>
+				<div class="mb-2">
+					<label for="elitismCountInput" class="block text-sm font-medium text-gray-300">Nb Élites:</label>
+					<input type="number" id="elitismCountInput" min="1" max="10" value="2"
+						class="w-full p-2 bg-gray-900 border border-gray-600 rounded-md text-gray-100">
+				</div>
+				<div class="mb-2">
+					<label for="mutationRateInput" class="block text-sm font-medium text-gray-300">Taux de Mutation:</label>
+					<input type="range" id="mutationRateInput" min="0.01" max="0.5" step="0.01" value="0.08"
+						class="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer range-lg accent-blue-500">
+					<span id="mutationRateValue" class="text-sm text-gray-400">0.08</span>
+				</div>
+				<div class="mb-2">
+					<label for="mutationAmountInput" class="block text-sm font-medium text-gray-300">Amplitude Mutation:</label>
+					<input type="range" id="mutationAmountInput" min="0.01" max="1.0" step="0.01" value="0.15"
+						class="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer range-lg accent-blue-500">
+					<span id="mutationAmountValue" class="text-sm text-gray-400">0.15</span>
+				</div>
+				<div class="mb-2">
+					<label for="aiDecisionIntervalInput" class="block text-sm font-medium text-gray-300">Intervalle Décision IA (ms):</label>
+					<input type="number" id="aiDecisionIntervalInput" min="1" max="100" value="4"
+						class="w-full p-2 bg-gray-900 border border-gray-600 rounded-md text-gray-100">
+				</div>
+				<div class="mb-2">
+					<label for="epsilonInitialInput" class="block text-sm font-medium text-gray-300">Epsilon Initial:</label>
+					<input type="range" id="epsilonInitialInput" min="0.01" max="1.0" step="0.01" value="0.5"
+						class="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer range-lg accent-blue-500">
+					<span id="epsilonInitialValue" class="text-sm text-gray-400">0.5</span>
+				</div>
+				<div class="mb-2">
+					<label for="epsilonFinalInput" class="block text-sm font-medium text-gray-300">Epsilon Final:</label>
+					<input type="range" id="epsilonFinalInput" min="0.001" max="0.1" step="0.001" value="0.01"
+						class="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer range-lg accent-blue-500">
+					<span id="epsilonFinalValue" class="text-sm text-gray-400">0.01</span>
+				</div>
+			</div>
+
+			<!-- Display & UI -->
+			<div class="bg-gray-700 p-4 rounded-lg">
+				<h3 class="text-xl font-semibold mb-3 text-gray-100">Affichage & UI</h3>
+				<div class="flex items-center mb-2">
+					<input type="checkbox" id="showGhostIndividualsInput" checked
+						class="form-checkbox h-5 w-5 text-blue-600 rounded-md border-gray-600 focus:ring-blue-500">
+					<label for="showGhostIndividualsInput" class="ml-2 block text-sm font-medium text-gray-300">Afficher Individus Fantômes</label>
+				</div>
+				<div class="mb-2">
+					<label for="focusChangeThresholdFramesInput" class="block text-sm font-medium text-gray-300">Seuil Changement Focus (frames):</label>
+					<input type="number" id="focusChangeThresholdFramesInput" min="1" max="100" value="15"
+						class="w-full p-2 bg-gray-900 border border-gray-600 rounded-md text-gray-100">
+				</div>
+			</div>
+
+			<button id="applySettingsButton"
+				class="bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-6 rounded-lg shadow-md transition duration-300 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-opacity-75 w-full">
+				Appliquer les Paramètres
+			</button>
+			<button id="resetSettingsButton"
+				class="bg-gray-500 hover:bg-gray-600 text-white font-bold py-3 px-6 rounded-lg shadow-md transition duration-300 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-opacity-75 w-full mt-2">
+				Réinitialiser aux Paramètres par Défaut
+			</button>
+		</div>
+	</div>
+
+	<script>
+		// Game constants definition (now using let for reconfigurability)
+		let GAME_WIDTH = 600;
+		let GAME_HEIGHT = 600;
+		let SQUARE_SIZE = 25;
+		let CIRCLE_RADIUS = 10;
+		let INITIAL_CIRCLES = 5;
+		let WAVE_DURATION = 5000;
+		let MAX_WAVES = 100;
+
+		// Rewards and penalties (now using let)
+		let REWARD_COLLECT_CIRCLE = 25;
+		let PENALTY_IDLE = -0.05;
+		let PENALTY_WALL_COLLISION = -1;
+		let REWARD_MOVE_TOWARDS_CIRCLE = 0.2;
+		let NEW_REWARD_DIRECT_HEADING = 0.5;
+		let NEW_PENALTY_WRONG_HEADING = 0.25;
+		let MAX_STEPS_WITHOUT_COLLECTION = 75;
+		let PENALTY_NO_COLLECTION_SOON = -0.5;
+
+		// Game variables
+		let canvas, ctx;
+
+		// --- Population & Genetic Algorithm Constants (now using let) ---
+		let POPULATION_SIZE = 10;
+		let ELITISM_COUNT = 2;
+		let MUTATION_RATE = 0.08;
+		let MUTATION_AMOUNT = 0.15;
+
+		// --- Fixed Simulation Parameters (now using let if configurable) ---
+		let AI_DECISION_INTERVAL = 4;
+		let STEPS_PER_GENERATION_EVALUATION; // Calculated dynamically
+
+		// --- Population State Variables ---
+		let neuralNetworks = [];
+		let individualScores = new Array(POPULATION_SIZE).fill(0);
+		const individualColors = [
+			"rgba(59, 130, 246, 0.9)", "rgba(239, 68, 68, 0.9)", "rgba(16, 185, 129, 0.9)",
+			"rgba(245, 158, 11, 0.9)", "rgba(139, 92, 246, 0.9)", "rgba(236, 72, 153, 0.9)",
+			"rgba(20, 184, 166, 0.9)", "rgba(249, 115, 22, 0.9)", "rgba(107, 114, 128, 0.9)",
+			"rgba(163, 230, 53, 0.9)"
+		];
+		let currentIndividualIndex = 0;
+		let currentGeneration = 1;
+		let currentGenerationCircleData = [];
+
+		// --- Individual Game States (Population Arrays) ---
+		let squares = new Array(POPULATION_SIZE);
+		let populationCircles = new Array(POPULATION_SIZE);
+		let currentWaveScores = new Array(POPULATION_SIZE).fill(0);
+		let populationTrainingData = new Array(POPULATION_SIZE);
+		for (let i = 0; i < POPULATION_SIZE; i++) {
+			populationTrainingData[i] = [];
+		}
+		let lastSquarePositions = new Array(POPULATION_SIZE);
+		let stepsSinceLastCollection = new Array(POPULATION_SIZE).fill(0);
+
+		// --- Simulation Step Tracking ---
+		let currentStepInGeneration = 0;
+		let displayedIndividualIndex = 0;
+
+		let isTraining = false;
+		let gameLoopId;
+		let showGhostIndividuals = true; // MODIFIED: default value to true
+		let overallBestScore = -Infinity;
+
+		// Variables for focus inertia in ghost mode (now using let)
+		let currentFocusedIndividual = 0;
+		let candidateForFocus = 0;
+		let framesAsCandidate = 0;
+		let FOCUS_CHANGE_THRESHOLD_FRAMES = 15; // Now configurable
+
+		let epsilon = 0.5;
+		let initialEpsilon = 0.5; // Now configurable
+		let finalEpsilon = 0.01; // Now configurable
+
+		const OUTPUT_ACTIONS = ['idle', 'up', 'down', 'left', 'right'];
+
+		const startButton = document.getElementById('startButton');
+		const waveNumberSpan = document.getElementById('waveNumber');
+		const currentScoreSpan = document.getElementById('currentScore');
+		const statusMessageSpan = document.getElementById('statusMessage');
+		const maxWavesDisplay = document.getElementById('maxWavesDisplay');
+		const epsilonDisplay = document.getElementById('epsilonDisplay');
+
+        const loadingOverlay = document.getElementById('loadingOverlay');
+        const progressBar = document.getElementById('progressBar');
+        const loadingText = document.getElementById('loadingText');
+
+		// Settings Panel Elements
+		const settingsButton = document.getElementById('settingsButton');
+		const settingsPanel = document.getElementById('settingsPanel');
+		const closeSettingsButton = document.getElementById('closeSettings');
+		const applySettingsButton = document.getElementById('applySettingsButton');
+		const resetSettingsButton = document.getElementById('resetSettingsButton');
+
+		// Input elements - Store references for easier access
+		const settingsInputs = {
+			gameWidth: document.getElementById('gameWidthInput'),
+			gameHeight: document.getElementById('gameHeightInput'),
+			squareSize: document.getElementById('squareSizeInput'),
+			circleRadius: document.getElementById('circleRadiusInput'),
+			initialCircles: document.getElementById('initialCirclesInput'),
+			waveDuration: document.getElementById('waveDurationInput'),
+			maxWaves: document.getElementById('maxWavesInput'),
+
+			rewardCollectCircle: document.getElementById('rewardCollectCircleInput'),
+			penaltyIdle: document.getElementById('penaltyIdleInput'),
+			penaltyWallCollision: document.getElementById('penaltyWallCollisionInput'),
+			rewardMoveTowardsCircle: document.getElementById('rewardMoveTowardsCircleInput'),
+			newRewardDirectHeading: document.getElementById('newRewardDirectHeadingInput'),
+			newPenaltyWrongHeading: document.getElementById('newPenaltyWrongHeadingInput'),
+			maxStepsWithoutCollection: document.getElementById('maxStepsWithoutCollectionInput'),
+			penaltyNoCollectionSoon: document.getElementById('penaltyNoCollectionSoonInput'),
+
+			populationSize: document.getElementById('populationSizeInput'),
+			elitismCount: document.getElementById('elitismCountInput'),
+			mutationRate: document.getElementById('mutationRateInput'),
+			mutationAmount: document.getElementById('mutationAmountInput'),
+			aiDecisionInterval: document.getElementById('aiDecisionIntervalInput'),
+			epsilonInitial: document.getElementById('epsilonInitialInput'),
+			epsilonFinal: document.getElementById('epsilonFinalInput'),
+
+			showGhostIndividuals: document.getElementById('showGhostIndividualsInput'),
+			focusChangeThresholdFrames: document.getElementById('focusChangeThresholdFramesInput')
+		};
+
+		// Span elements for range inputs
+		const settingsValuesSpans = {
+			gameWidth: document.getElementById('gameWidthValue'),
+			gameHeight: document.getElementById('gameHeightValue'),
+			mutationRate: document.getElementById('mutationRateValue'),
+			mutationAmount: document.getElementById('mutationAmountValue'),
+			epsilonInitial: document.getElementById('epsilonInitialValue'),
+			epsilonFinal: document.getElementById('epsilonFinalValue'),
+		};
+
+		// Default values for resetting
+		const defaultSettings = {
+                GAME_WIDTH: 600,
+                GAME_HEIGHT: 600,
+                SQUARE_SIZE: 25,
+                CIRCLE_RADIUS: 10,
+                INITIAL_CIRCLES: 5,
+                WAVE_DURATION: 5000,
+                MAX_WAVES: 100,
+                REWARD_COLLECT_CIRCLE: 25,
+                PENALTY_IDLE: -0.05,
+                PENALTY_WALL_COLLISION: -1,
+                REWARD_MOVE_TOWARDS_CIRCLE: 0.2,
+                NEW_REWARD_DIRECT_HEADING: 0.5,
+                NEW_PENALTY_WRONG_HEADING: 0.25,
+                MAX_STEPS_WITHOUT_COLLECTION: 75,
+                PENALTY_NO_COLLECTION_SOON: -0.5,
+                POPULATION_SIZE: 10,
+                ELITISM_COUNT: 2,
+                MUTATION_RATE: 0.08,
+                MUTATION_AMOUNT: 0.15,
+                AI_DECISION_INTERVAL: 4,
+                FOCUS_CHANGE_THRESHOLD_FRAMES: 15,
+                initialEpsilon: 0.5,
+                finalEpsilon: 0.01,
+                showGhostIndividuals: true
+            };
+
+
+		document.addEventListener('DOMContentLoaded', async () => {
+			canvas = document.getElementById('gameCanvas');
+			ctx = canvas.getContext('2d');
+			maxWavesDisplay.textContent = MAX_WAVES;
+			epsilonDisplay.textContent = epsilon.toFixed(2);
+
+			// Initial calculation of STEPS_PER_GENERATION_EVALUATION
+			STEPS_PER_GENERATION_EVALUATION = WAVE_DURATION / AI_DECISION_INTERVAL;
+
+			statusMessageSpan.textContent = "Chargement de la bibliothèque de réseau de neurones...";
+
+			const brainScript = document.createElement('script');
+			brainScript.src = "https://cdnjs.cloudflare.com/ajax/libs/brain.js/2.0.0-beta.24/browser.min.js";
+			brainScript.async = true;
+
+			brainScript.onload = async () => {
+				console.log("Brain.js loaded.");
+				if (typeof brain === 'undefined') {
+					console.error("Brain.js is not properly loaded onto the window object.");
+					statusMessageSpan.textContent = "Erreur critique: Brain.js non trouvé.";
+					statusMessageSpan.className = 'font-bold text-red-600';
+					startButton.disabled = true;
+					return;
+				}
+				await loadNeuralNetwork();
+				initGame(displayedIndividualIndex);
+
+				startButton.disabled = false;
+				statusMessageSpan.textContent = "Prêt à commencer l'entraînement.";
+				// Adjusted status message color to fit dark theme
+				statusMessageSpan.className = 'font-bold text-green-400';
+
+				startButton.addEventListener('click', toggleTraining);
+
+				const uploadWeightsFile = document.getElementById('uploadWeightsFile');
+				const loadJsonToInd0Button = document.getElementById('loadJsonToInd0Button');
+
+				if (loadJsonToInd0Button && uploadWeightsFile) {
+					loadJsonToInd0Button.addEventListener('click', () => {
+						if (uploadWeightsFile.files.length === 0) {
+							statusMessageSpan.textContent = "Veuillez sélectionner un fichier JSON d'abord.";
+							statusMessageSpan.className = 'font-bold text-red-400'; // Adjusted for dark theme
+							return;
+						}
+
+						const file = uploadWeightsFile.files[0];
+						if (file.type !== "application/json") {
+							statusMessageSpan.textContent = "Type de fichier invalide. Veuillez sélectionner un fichier .json.";
+							statusMessageSpan.className = 'font-bold text-red-400'; // Adjusted for dark theme
+							return;
+						}
+
+						const reader = new FileReader();
+						reader.onload = (event) => {
+							try {
+								const jsonData = JSON.parse(event.target.result);
+
+								if (typeof jsonData !== 'object' || jsonData === null || (!jsonData.layers && !jsonData.sizes)) {
+									throw new Error("Structure JSON invalide pour un réseau Brain.js.");
+								}
+
+								if (!neuralNetworks || neuralNetworks.length !== POPULATION_SIZE) {
+									console.warn("La population de réseaux n'était pas initialisée. Tentative d'initialisation...");
+									// Re-create a dummy population if it's not ready, to avoid error.
+									// This is a simplified fallback; a real app might handle this more robustly.
+									if (!neuralNetworks || neuralNetworks.length === 0) {
+										createNewNeuralNetwork().then(() => {
+											// After dummy networks are created, try to apply the loaded JSON
+											const newNet = new window.brain.NeuralNetwork().fromJSON(jsonData);
+											newNet.colorDisplay = individualColors[0 % individualColors.length];
+											neuralNetworks[0] = newNet;
+											statusMessageSpan.textContent = "Poids chargés avec succès pour l'Individu 0 ! (Population réinitialisée)";
+											statusMessageSpan.className = 'font-bold text-green-400';
+											if (typeof initGame === 'function' && typeof draw === 'function') {
+												initGame(0);
+												draw();
+											}
+										}).catch(e => {
+											console.error("Error during dummy network creation for JSON load:", e);
+											statusMessageSpan.textContent = \`Erreur: \${e.message}\`;
+											statusMessageSpan.className = 'font-bold text-red-400';
+										});
+										return;
+									} else {
+										throw new Error("Population de réseaux non conforme. Impossible d'appliquer les poids.");
+									}
+								}
+
+								const newNet = new window.brain.NeuralNetwork().fromJSON(jsonData);
+								newNet.colorDisplay = individualColors[0 % individualColors.length];
+								neuralNetworks[0] = newNet;
+
+								statusMessageSpan.textContent = "Poids chargés avec succès pour l'Individu 0 !";
+								statusMessageSpan.className = 'font-bold text-green-400'; // Adjusted for dark theme
+								console.log("Poids chargés depuis fichier JSON pour l'individu 0:", neuralNetworks[0]);
+
+								if (typeof initGame === 'function' && typeof draw === 'function') {
+									initGame(0);
+									draw();
+								}
+								uploadWeightsFile.value = '';
+
+							} catch (error) {
+								console.error("Erreur lors du chargement ou du parsing du JSON:", error);
+								statusMessageSpan.textContent = \`Erreur: \${error.message}\`;
+								statusMessageSpan.className = 'font-bold text-red-400'; // Adjusted for dark theme
+							}
+						};
+						reader.onerror = () => {
+							console.error("Erreur de lecture du fichier.");
+							statusMessageSpan.textContent = "Erreur de lecture du fichier.";
+							statusMessageSpan.className = 'font-bold text-red-400'; // Adjusted for dark theme
+						};
+						reader.readAsText(file);
+					});
+				}
+
+				if (squares && squares[displayedIndividualIndex]) {
+					// lastSquarePosition might not be defined on initial load if game hasn't started
+					// This line is safe to remove or wrap in a check if it causes issues on load
+					// lastSquarePosition = { x: squares[displayedIndividualIndex].x, y: squares[displayedIndividualIndex].y };
+				}
+			};
+			brainScript.onerror = () => {
+				statusMessageSpan.textContent = "Erreur de chargement de Brain.js. Veuillez vérifier votre connexion et réessayer.";
+				statusMessageSpan.className = 'font-bold text-red-400'; // Adjusted for dark theme
+				console.error("Failed to load brain.js script.");
+				startButton.disabled = true;
+			};
+			document.head.appendChild(brainScript);
+
+			// Event Listeners for Settings Panel
+			settingsButton.addEventListener('click', openSettingsPanel);
+			closeSettingsButton.addEventListener('click', closeSettingsPanel);
+			applySettingsButton.addEventListener('click', applySettings);
+			resetSettingsButton.addEventListener('click', resetSettings);
+
+			// Update range value displays
+                settingsInputs.gameWidth.addEventListener('input', (e) => settingsValuesSpans.gameWidth.textContent = e.target.value);
+                settingsInputs.gameHeight.addEventListener('input', (e) => settingsValuesSpans.gameHeight.textContent = e.target.value);
+                settingsInputs.mutationRate.addEventListener('input', (e) => settingsValuesSpans.mutationRate.textContent = parseFloat(e.target.value).toFixed(2));
+                settingsInputs.mutationAmount.addEventListener('input', (e) => settingsValuesSpans.mutationAmount.textContent = parseFloat(e.target.value).toFixed(2));
+                settingsInputs.epsilonInitial.addEventListener('input', (e) => settingsValuesSpans.epsilonInitial.textContent = parseFloat(e.target.value).toFixed(2));
+                settingsInputs.epsilonFinal.addEventListener('input', (e) => settingsValuesSpans.epsilonFinal.textContent = parseFloat(e.target.value).toFixed(3)); // 3 decimal places for smaller values
+		});
+
+		function openSettingsPanel() {
+			settingsPanel.classList.remove('translate-x-full');
+			populateSettingsInputs(); // Load current values into inputs
+		}
+
+		function closeSettingsPanel() {
+			settingsPanel.classList.add('translate-x-full');
+		}
+
+		function populateSettingsInputs() {
+                // Game Parameters
+                settingsInputs.gameWidth.value = GAME_WIDTH;
+                settingsValuesSpans.gameWidth.textContent = GAME_WIDTH;
+                settingsInputs.gameHeight.value = GAME_HEIGHT;
+                settingsValuesSpans.gameHeight.textContent = GAME_HEIGHT;
+                settingsInputs.squareSize.value = SQUARE_SIZE;
+                settingsInputs.circleRadius.value = CIRCLE_RADIUS;
+                settingsInputs.initialCircles.value = INITIAL_CIRCLES;
+                settingsInputs.waveDuration.value = WAVE_DURATION;
+                settingsInputs.maxWaves.value = MAX_WAVES;
+
+                // Rewards & Penalties
+                settingsInputs.rewardCollectCircle.value = REWARD_COLLECT_CIRCLE;
+                settingsInputs.penaltyIdle.value = PENALTY_IDLE;
+                settingsInputs.penaltyWallCollision.value = PENALTY_WALL_COLLISION;
+                settingsInputs.rewardMoveTowardsCircle.value = REWARD_MOVE_TOWARDS_CIRCLE;
+                settingsInputs.newRewardDirectHeading.value = NEW_REWARD_DIRECT_HEADING;
+                settingsInputs.newPenaltyWrongHeading.value = NEW_PENALTY_WRONG_HEADING;
+                settingsInputs.maxStepsWithoutCollection.value = MAX_STEPS_WITHOUT_COLLECTION;
+                settingsInputs.penaltyNoCollectionSoon.value = PENALTY_NO_COLLECTION_SOON;
+
+                // Genetic Algorithm Parameters
+                settingsInputs.populationSize.value = POPULATION_SIZE;
+                settingsInputs.elitismCount.value = ELITISM_COUNT;
+                settingsInputs.mutationRate.value = MUTATION_RATE;
+                settingsValuesSpans.mutationRate.textContent = MUTATION_RATE.toFixed(2);
+                settingsInputs.mutationAmount.value = MUTATION_AMOUNT;
+                settingsValuesSpans.mutationAmount.textContent = MUTATION_AMOUNT.toFixed(2);
+                settingsInputs.aiDecisionInterval.value = AI_DECISION_INTERVAL;
+                settingsInputs.epsilonInitial.value = initialEpsilon;
+                settingsValuesSpans.epsilonInitial.textContent = initialEpsilon.toFixed(2);
+                settingsInputs.epsilonFinal.value = finalEpsilon;
+                settingsValuesSpans.epsilonFinal.textContent = finalEpsilon.toFixed(3);
+
+                // Display & UI
+                settingsInputs.showGhostIndividuals.checked = showGhostIndividuals;
+                settingsInputs.focusChangeThresholdFrames.value = FOCUS_CHANGE_THRESHOLD_FRAMES;
+            }
+
+		function applySettings() {
+			// Stop current training if running
+			if (isTraining) {
+				stopTraining();
+			}
+
+			// Update global variables with new values from inputs
+			GAME_WIDTH = parseInt(settingsInputs.gameWidth.value);
+			GAME_HEIGHT = parseInt(settingsInputs.gameHeight.value);
+			SQUARE_SIZE = parseInt(settingsInputs.squareSize.value);
+			CIRCLE_RADIUS = parseInt(settingsInputs.circleRadius.value);
+			INITIAL_CIRCLES = parseInt(settingsInputs.initialCircles.value);
+			WAVE_DURATION = parseInt(settingsInputs.waveDuration.value);
+			MAX_WAVES = parseInt(settingsInputs.maxWaves.value);
+
+			REWARD_COLLECT_CIRCLE = parseFloat(settingsInputs.rewardCollectCircle.value);
+			PENALTY_IDLE = parseFloat(settingsInputs.penaltyIdle.value);
+			PENALTY_WALL_COLLISION = parseFloat(settingsInputs.penaltyWallCollision.value);
+			REWARD_MOVE_TOWARDS_CIRCLE = parseFloat(settingsInputs.rewardMoveTowardsCircle.value);
+			NEW_REWARD_DIRECT_HEADING = parseFloat(settingsInputs.newRewardDirectHeading.value);
+			NEW_PENALTY_WRONG_HEADING = parseFloat(settingsInputs.newPenaltyWrongHeading.value);
+			MAX_STEPS_WITHOUT_COLLECTION = parseInt(settingsInputs.maxStepsWithoutCollection.value);
+			PENALTY_NO_COLLECTION_SOON = parseFloat(settingsInputs.penaltyNoCollectionSoon.value);
+
+			// Validate POPULATION_SIZE and ELITISM_COUNT
+			const newPopulationSize = parseInt(settingsInputs.populationSize.value);
+			const newElitismCount = parseInt(settingsInputs.elitismCount.value);
+
+			if (newPopulationSize < newElitismCount) {
+				statusMessageSpan.textContent = "Erreur: Le nombre d'élites ne peut pas être supérieur à la taille de la population.";
+				statusMessageSpan.className = 'font-bold text-red-400';
+				return; // Stop applying settings
+			}
+			POPULATION_SIZE = newPopulationSize;
+			ELITISM_COUNT = newElitismCount;
+
+			MUTATION_RATE = parseFloat(settingsInputs.mutationRate.value);
+			MUTATION_AMOUNT = parseFloat(settingsInputs.mutationAmount.value);
+			AI_DECISION_INTERVAL = parseInt(settingsInputs.aiDecisionInterval.value);
+			initialEpsilon = parseFloat(settingsInputs.epsilonInitial.value);
+			finalEpsilon = parseFloat(settingsInputs.epsilonFinal.value);
+			epsilon = initialEpsilon; // Reset epsilon when settings are applied
+
+			showGhostIndividuals = settingsInputs.showGhostIndividuals.checked;
+			FOCUS_CHANGE_THRESHOLD_FRAMES = parseInt(settingsInputs.focusChangeThresholdFrames.value);
+
+			// Recalculate dependent constants
+			STEPS_PER_GENERATION_EVALUATION = WAVE_DURATION / AI_DECISION_INTERVAL;
+			if (isNaN(STEPS_PER_GENERATION_EVALUATION) || !isFinite(STEPS_PER_GENERATION_EVALUATION)) {
+				STEPS_PER_GENERATION_EVALUATION = 1; // Prevent division by zero or invalid numbers
+				console.warn("STEPS_PER_GENERATION_EVALUATION calculated to be NaN or Infinity, set to 1. Check WAVE_DURATION and AI_DECISION_INTERVAL.");
+			}
+
+			// Update canvas size
+			canvas.width = GAME_WIDTH;
+			canvas.height = GAME_HEIGHT;
+
+			// Re-initialize neural network population if POPULATION_SIZE changed
+			// For simplicity, we re-create the entire population if its size changes,
+			// which means existing weights are lost. For a more advanced system,
+			// one would handle resizing the population more carefully.
+			if (neuralNetworks.length !== POPULATION_SIZE) {
+				console.warn("La taille de la population a changé. Recréation des réseaux de neurones.");
+				neuralNetworks = []; // Clear existing networks
+				createNewNeuralNetwork(); // This will re-populate neuralNetworks array
+			}
+
+
+			// Reinitialize game states for all individuals based on new parameters
+			squares = new Array(POPULATION_SIZE);
+			populationCircles = new Array(POPULATION_SIZE);
+			currentWaveScores = new Array(POPULATION_SIZE).fill(0);
+			populationTrainingData = new Array(POPULATION_SIZE);
+			for (let i = 0; i < POPULATION_SIZE; i++) {
+				populationTrainingData[i] = [];
+			}
+			lastSquarePositions = new Array(POPULATION_SIZE);
+			stepsSinceLastCollection = new Array(POPULATION_SIZE).fill(0);
+
+			// Re-init game for all individuals to ensure correct starting positions and circles
+			generateCirclesForGeneration(INITIAL_CIRCLES); // Generate common circles for the first wave
+			for (let i = 0; i < POPULATION_SIZE; i++) {
+				initGame(i);
+			}
+
+			// Reset game state variables
+			currentGeneration = 1;
+			currentIndividualIndex = 0;
+			currentStepInGeneration = 0;
+			overallBestScore = -Infinity;
+			currentFocusedIndividual = 0;
+			candidateForFocus = 0;
+			framesAsCandidate = 0;
+
+			// Update UI with new max waves
+			maxWavesDisplay.textContent = MAX_WAVES;
+
+			statusMessageSpan.textContent = "Paramètres appliqués. Prêt à lancer l'entraînement.";
+			statusMessageSpan.className = 'font-bold text-green-400';
+			console.log("Paramètres appliqués:", {
+				GAME_WIDTH, GAME_HEIGHT, SQUARE_SIZE, CIRCLE_RADIUS, INITIAL_CIRCLES, WAVE_DURATION, MAX_WAVES,
+				REWARD_COLLECT_CIRCLE, PENALTY_IDLE, PENALTY_WALL_COLLISION, REWARD_MOVE_TOWARDS_CIRCLE,
+				NEW_REWARD_DIRECT_HEADING, NEW_PENALTY_WRONG_HEADING, MAX_STEPS_WITHOUT_COLLECTION, PENALTY_NO_COLLECTION_SOON,
+				POPULATION_SIZE, ELITISM_COUNT, MUTATION_RATE, MUTATION_AMOUNT, AI_DECISION_INTERVAL,
+				initialEpsilon, finalEpsilon, showGhostIndividuals, FOCUS_CHANGE_THRESHOLD_FRAMES
+			});
+
+			closeSettingsPanel();
+			// Optionally restart training automatically
+			// startTraining();
+		}
+
+		function resetSettings() {
+                // Stop current training if running
+                if (isTraining) {
+                    stopTraining();
+                }
+
+                // Apply default values to global variables
+                GAME_WIDTH = defaultSettings.GAME_WIDTH;
+                GAME_HEIGHT = defaultSettings.GAME_HEIGHT;
+                SQUARE_SIZE = defaultSettings.SQUARE_SIZE;
+                CIRCLE_RADIUS = defaultSettings.CIRCLE_RADIUS;
+                INITIAL_CIRCLES = defaultSettings.INITIAL_CIRCLES;
+                WAVE_DURATION = defaultSettings.WAVE_DURATION;
+                MAX_WAVES = defaultSettings.MAX_WAVES;
+
+                REWARD_COLLECT_CIRCLE = defaultSettings.REWARD_COLLECT_CIRCLE;
+                PENALTY_IDLE = defaultSettings.PENALTY_IDLE;
+                PENALTY_WALL_COLLISION = defaultSettings.PENALTY_WALL_COLLISION;
+                REWARD_MOVE_TOWARDS_CIRCLE = defaultSettings.REWARD_MOVE_TOWARDS_CIRCLE;
+                NEW_REWARD_DIRECT_HEADING = defaultSettings.NEW_REWARD_DIRECT_HEADING;
+                NEW_PENALTY_WRONG_HEADING = defaultSettings.NEW_PENALTY_WRONG_HEADING;
+                MAX_STEPS_WITHOUT_COLLECTION = defaultSettings.MAX_STEPS_WITHOUT_COLLECTION;
+                PENALTY_NO_COLLECTION_SOON = defaultSettings.PENALTY_NO_COLLECTION_SOON;
+
+                POPULATION_SIZE = defaultSettings.POPULATION_SIZE;
+                ELITISM_COUNT = defaultSettings.ELITISM_COUNT;
+                MUTATION_RATE = defaultSettings.MUTATION_RATE;
+                MUTATION_AMOUNT = defaultSettings.MUTATION_AMOUNT;
+                AI_DECISION_INTERVAL = defaultSettings.AI_DECISION_INTERVAL;
+                initialEpsilon = defaultSettings.initialEpsilon;
+                finalEpsilon = defaultSettings.finalEpsilon;
+                epsilon = initialEpsilon; // Reset epsilon
+
+                showGhostIndividuals = defaultSettings.showGhostIndividuals;
+                FOCUS_CHANGE_THRESHOLD_FRAMES = defaultSettings.FOCUS_CHANGE_THRESHOLD_FRAMES;
+
+                // Update input fields to show default values
+                populateSettingsInputs();
+
+                // Recalculate dependent constants
+                STEPS_PER_GENERATION_EVALUATION = WAVE_DURATION / AI_DECISION_INTERVAL;
+                if (isNaN(STEPS_PER_GENERATION_EVALUATION) || !isFinite(STEPS_PER_GENERATION_EVALUATION)) {
+                    STEPS_PER_GENERATION_EVALUATION = 1;
+                }
+
+                // Update canvas size
+                canvas.width = GAME_WIDTH;
+                canvas.height = GAME_HEIGHT;
+
+                // Re-initialize neural network population because POPULATION_SIZE might change,
+                // or even if it's the same, we might want a fresh start from default.
+                neuralNetworks = [];
+                createNewNeuralNetwork();
+
+                // Reinitialize game states for all individuals based on new parameters
+                squares = new Array(POPULATION_SIZE);
+                populationCircles = new Array(POPULATION_SIZE);
+                currentWaveScores = new Array(POPULATION_SIZE).fill(0);
+                populationTrainingData = new Array(POPULATION_SIZE);
+                for (let i = 0; i < POPULATION_SIZE; i++) {
+                    populationTrainingData[i] = [];
+                }
+                lastSquarePositions = new Array(POPULATION_SIZE);
+                stepsSinceLastCollection = new Array(POPULATION_SIZE).fill(0);
+
+                generateCirclesForGeneration(INITIAL_CIRCLES);
+                for (let i = 0; i < POPULATION_SIZE; i++) {
+                    initGame(i);
+                }
+
+                // Reset game state variables
+                currentGeneration = 1;
+                currentIndividualIndex = 0;
+                currentStepInGeneration = 0;
+                overallBestScore = -Infinity;
+                currentFocusedIndividual = 0;
+                candidateForFocus = 0;
+                framesAsCandidate = 0;
+
+                maxWavesDisplay.textContent = MAX_WAVES;
+
+                statusMessageSpan.textContent = "Paramètres réinitialisés aux valeurs par défaut. Prêt à lancer l'entraînement.";
+                statusMessageSpan.className = 'font-bold text-green-400';
+                console.log("Paramètres réinitialisés.");
+
+                closeSettingsPanel();
+            }
+
+		function generateCirclesForGeneration(count) {
+			currentGenerationCircleData = [];
+			for (let i = 0; i < count; i++) {
+				currentGenerationCircleData.push({
+					x: Math.random() * (GAME_WIDTH - CIRCLE_RADIUS * 2) + CIRCLE_RADIUS,
+					y: Math.random() * (GAME_HEIGHT - CIRCLE_RADIUS * 2) + CIRCLE_RADIUS,
+					radius: CIRCLE_RADIUS,
+					collected: false
+				});
+			}
+		}
+
+		function initGame(individualIndex) {
+			squares[individualIndex] = {
+				x: GAME_WIDTH / 2 - SQUARE_SIZE / 2,
+				y: GAME_HEIGHT / 2 - SQUARE_SIZE / 2,
+				size: SQUARE_SIZE,
+				dx: 0,
+				dy: 0
+			};
+			lastSquarePositions[individualIndex] = { x: squares[individualIndex].x, y: squares[individualIndex].y };
+
+			if (currentGenerationCircleData && currentGenerationCircleData.length > 0) {
+				populationCircles[individualIndex] = JSON.parse(JSON.stringify(currentGenerationCircleData));
+			} else {
+				populationCircles[individualIndex] = [];
+				generateNewRandomCircles(INITIAL_CIRCLES, individualIndex);
+			}
+
+			currentWaveScores[individualIndex] = 0;
+			stepsSinceLastCollection[individualIndex] = 0;
+
+			if (!Array.isArray(populationTrainingData[individualIndex])) {
+				populationTrainingData[individualIndex] = [];
+			} else {
+				populationTrainingData[individualIndex].length = 0;
+			}
+
+			if (individualIndex === displayedIndividualIndex) {
+				draw();
+			}
+		}
+
+		function updateIndividualGameState(individualIndex) {
+			const currentSquare = squares[individualIndex];
+			const currentCircles = populationCircles[individualIndex];
+
+			if (!currentSquare) {
+				return;
+			}
+
+			if (typeof stepsSinceLastCollection !== 'undefined' && stepsSinceLastCollection.length > individualIndex) {
+				stepsSinceLastCollection[individualIndex]++;
+			}
+
+			currentSquare.x += currentSquare.dx;
+			currentSquare.y += currentSquare.dy;
+
+			if (currentSquare.x < 0) currentSquare.x = 0;
+			if (currentSquare.x + currentSquare.size > GAME_WIDTH) currentSquare.x = GAME_WIDTH - currentSquare.size;
+			if (currentSquare.y < 0) currentSquare.y = 0;
+			if (currentSquare.y + currentSquare.size > GAME_HEIGHT) currentSquare.y = GAME_HEIGHT - currentSquare.size;
+
+			let collectedAny = false;
+			if (currentCircles) {
+				for (let i = currentCircles.length - 1; i >= 0; i--) {
+					const circle = currentCircles[i];
+					if (!circle.collected) {
+						const dist = Math.sqrt(
+							Math.pow(currentSquare.x + currentSquare.size / 2 - circle.x, 2) +
+							Math.pow(currentSquare.y + currentSquare.size / 2 - circle.y, 2)
+						);
+						if (dist < (currentSquare.size / 2 + circle.radius)) {
+							circle.collected = true;
+							currentWaveScores[individualIndex] += REWARD_COLLECT_CIRCLE;
+							currentCircles.splice(i, 1);
+							collectedAny = true;
+							if (typeof stepsSinceLastCollection !== 'undefined' && stepsSinceLastCollection.length > individualIndex) {
+								stepsSinceLastCollection[individualIndex] = 0;
+							}
+						}
+					}
+				}
+			}
+
+			if (collectedAny) {
+				const currentCircleCount = currentCircles ? currentCircles.length : 0;
+				const circlesToGenerate = INITIAL_CIRCLES - currentCircleCount;
+				generateNewRandomCircles(circlesToGenerate > 0 ? circlesToGenerate : (currentCircleCount === 0 ? INITIAL_CIRCLES : 1), individualIndex);
+			}
+			if (lastSquarePositions) {
+				lastSquarePositions[individualIndex] = { x: currentSquare.x, y: currentSquare.y };
+			}
+		}
+
+		function generateNewRandomCircles(count, individualIndex) {
+			if (individualIndex === undefined) {
+				return;
+			}
+			if (!populationCircles[individualIndex]) {
+				populationCircles[individualIndex] = [];
+			}
+			for (let i = 0; i < count; i++) {
+				populationCircles[individualIndex].push({
+					x: Math.random() * (GAME_WIDTH - CIRCLE_RADIUS * 2) + CIRCLE_RADIUS,
+					y: Math.random() * (GAME_HEIGHT - CIRCLE_RADIUS * 2) + CIRCLE_RADIUS,
+					radius: CIRCLE_RADIUS,
+					collected: false
+				});
+			}
+		}
+
+		function draw() {
+			if (!ctx) return;
+			ctx.clearRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+
+			let activeIndividualIndex;
+			let circlesForDisplay;
+
+			if (showGhostIndividuals && Array.isArray(currentWaveScores) && currentWaveScores.length === POPULATION_SIZE) {
+				let bestScoreInThisFrame = -Infinity;
+				let bestScoreIndexInThisFrame = -1;
+
+				for (let i = 0; i < POPULATION_SIZE; i++) {
+					if (currentWaveScores[i] > bestScoreInThisFrame) {
+						bestScoreInThisFrame = currentWaveScores[i];
+						bestScoreIndexInThisFrame = i;
+					}
+				}
+
+				if (bestScoreIndexInThisFrame === -1) {
+					bestScoreIndexInThisFrame = currentFocusedIndividual;
+				}
+
+				if (bestScoreIndexInThisFrame === candidateForFocus) {
+					framesAsCandidate++;
+				} else {
+					candidateForFocus = bestScoreIndexInThisFrame;
+					framesAsCandidate = 1;
+				}
+
+				if (framesAsCandidate >= FOCUS_CHANGE_THRESHOLD_FRAMES) {
+					currentFocusedIndividual = candidateForFocus;
+				}
+
+				activeIndividualIndex = currentFocusedIndividual;
+
+				if (populationCircles && populationCircles[activeIndividualIndex]) {
+					circlesForDisplay = populationCircles[activeIndividualIndex];
+				} else if (populationCircles && populationCircles[displayedIndividualIndex]) {
+					circlesForDisplay = populationCircles[displayedIndividualIndex];
+					activeIndividualIndex = displayedIndividualIndex;
+					currentFocusedIndividual = displayedIndividualIndex;
+				} else {
+					circlesForDisplay = [];
+				}
+
+			} else {
+				activeIndividualIndex = displayedIndividualIndex;
+				if (populationCircles && populationCircles[activeIndividualIndex]) {
+					circlesForDisplay = populationCircles[activeIndividualIndex];
+				} else {
+					circlesForDisplay = [];
+				}
+				currentFocusedIndividual = displayedIndividualIndex;
+				candidateForFocus = displayedIndividualIndex;
+				framesAsCandidate = 0;
+			}
+
+			if (showGhostIndividuals && Array.isArray(squares) && Array.isArray(neuralNetworks)) {
+				for (let i = 0; i < POPULATION_SIZE; i++) {
+					if (i === activeIndividualIndex) {
+						continue;
+					}
+					const ghostSquare = squares[i];
+					const ghostNetwork = neuralNetworks[i];
+					if (ghostSquare && ghostNetwork && ghostNetwork.colorDisplay) {
+						let ghostColor = ghostNetwork.colorDisplay.replace(/, ?\d+(\.\d+)?\)/, ', 0.25)'); // MODIFIED: Opacity to 0.25
+						if (!ghostColor.includes('rgba')) {
+							if (ghostColor.startsWith('rgb(')) {
+								ghostColor = ghostColor.replace('rgb(', 'rgba(').replace(')', ', 0.25)'); // MODIFIED: Opacity to 0.25
+							}
+						}
+						ctx.fillStyle = ghostColor;
+						ctx.fillRect(ghostSquare.x, ghostSquare.y, ghostSquare.size, ghostSquare.size);
+					}
+				}
+			}
+
+			if (activeIndividualIndex < 0 || activeIndividualIndex >= POPULATION_SIZE || !squares[activeIndividualIndex]) {
+				return;
+			}
+			const currentSquareToDraw = squares[activeIndividualIndex];
+			if (!currentSquareToDraw) {
+				return;
+			}
+			if (neuralNetworks && neuralNetworks[activeIndividualIndex] && neuralNetworks[activeIndividualIndex].colorDisplay) {
+				ctx.fillStyle = neuralNetworks[activeIndividualIndex].colorDisplay;
+			} else {
+				ctx.fillStyle = 'rgba(59, 130, 246, 0.9)';
+			}
+			ctx.fillRect(currentSquareToDraw.x, currentSquareToDraw.y, currentSquareToDraw.size, currentSquareToDraw.size);
+			ctx.strokeStyle = '#2563eb';
+			ctx.lineWidth = 2;
+			ctx.strokeRect(currentSquareToDraw.x, currentSquareToDraw.y, currentSquareToDraw.size, currentSquareToDraw.size);
+
+			if (circlesForDisplay) {
+				circlesForDisplay.forEach(circle => {
+					if (!circle.collected) {
+						ctx.beginPath();
+						ctx.arc(circle.x, circle.y, circle.radius, 0, Math.PI * 2);
+						ctx.fillStyle = 'rgba(16, 185, 129, 0.9)';
+						ctx.fill();
+						ctx.strokeStyle = '#047857';
+						ctx.lineWidth = 2;
+						ctx.stroke();
+					}
+				});
+			}
+		}
+
+		function gameLoop() {
+			draw();
+			// Update UI after drawing to ensure score reflects the currently displayed individual
+			updateUI(currentFocusedIndividual);
+			gameLoopId = requestAnimationFrame(gameLoop);
+		}
+
+		function getNNInputs(individualIndex) {
+			const currentSquare = squares[individualIndex];
+			const currentCircles = populationCircles[individualIndex];
+
+			if (!currentSquare) {
+				return {
+					squareX: 0.5, squareY: 0.5, closestCircleX: 0.5, closestCircleY: 0.5,
+					distanceToClosestCircle: 1, distanceToLeftWall: 0.5, distanceToRightWall: 0.5,
+					distanceToTopWall: 0.5, distanceToBottomWall: 0.5,
+				};
+			}
+			const normalizedSquareX = currentSquare.x / GAME_WIDTH;
+			const normalizedSquareY = currentSquare.y / GAME_HEIGHT;
+
+			let closestCircle = null;
+			let minDistance = Infinity;
+
+			if (currentCircles) {
+				currentCircles.forEach(circle => {
+					if (!circle.collected) {
+						const dist = Math.sqrt(
+							Math.pow(currentSquare.x - circle.x, 2) +
+							Math.pow(currentSquare.y - circle.y, 2)
+						);
+						if (dist < minDistance) {
+							minDistance = dist;
+							closestCircle = circle;
+						}
+					}
+				});
+			}
+
+			let normalizedClosestCircleX = 0.5;
+			let normalizedClosestCircleY = 0.5;
+			let normalizedDistanceToClosestCircle = 1;
+
+			if (closestCircle) {
+				normalizedClosestCircleX = closestCircle.x / GAME_WIDTH;
+				normalizedClosestCircleY = closestCircle.y / GAME_HEIGHT;
+				normalizedDistanceToClosestCircle = minDistance / Math.sqrt(GAME_WIDTH * GAME_WIDTH + GAME_HEIGHT * GAME_HEIGHT);
+			}
+
+			return {
+				squareX: normalizedSquareX,
+				squareY: normalizedSquareY,
+				closestCircleX: normalizedClosestCircleX,
+				closestCircleY: normalizedClosestCircleY,
+				distanceToClosestCircle: normalizedDistanceToClosestCircle,
+				distanceToLeftWall: currentSquare.x / GAME_WIDTH,
+				distanceToRightWall: (GAME_WIDTH - (currentSquare.x + currentSquare.size)) / GAME_WIDTH,
+				distanceToTopWall: currentSquare.y / GAME_HEIGHT,
+				distanceToBottomWall: (GAME_HEIGHT - (currentSquare.y + currentSquare.size)) / GAME_HEIGHT,
+			};
+		}
+
+		function makeAIDecision(individualIndex) {
+			const currentIndNetwork = neuralNetworks[individualIndex];
+			const currentIndSquare = squares[individualIndex];
+
+			if (!currentIndNetwork || !currentIndSquare) {
+				return;
+			}
+			if (typeof currentIndNetwork.run !== 'function') {
+				return;
+			}
+
+			const inputs = getNNInputs(individualIndex);
+			const outputFromNN = currentIndNetwork.run(inputs);
+
+			let chosenAction;
+			if (Math.random() < epsilon) {
+				chosenAction = OUTPUT_ACTIONS[Math.floor(Math.random() * OUTPUT_ACTIONS.length)];
+			} else {
+				let bestNNAction = 'idle';
+				let maxOutput = -Infinity;
+				for (const actionName of OUTPUT_ACTIONS) {
+					if (outputFromNN[actionName] > maxOutput) {
+						maxOutput = outputFromNN[actionName];
+						bestNNAction = actionName;
+					}
+				}
+				chosenAction = bestNNAction;
+			}
+
+			const moveSpeed = 5;
+			currentIndSquare.dx = 0;
+			currentIndSquare.dy = 0;
+
+			switch (chosenAction) {
+				case 'up': currentIndSquare.dy = -moveSpeed; break;
+				case 'down': currentIndSquare.dy = moveSpeed; break;
+				case 'left': currentIndSquare.dx = -moveSpeed; break;
+				case 'right': currentIndSquare.dx = moveSpeed; break;
+				case 'idle': break;
+			}
+			const reward = calculateReward(chosenAction, inputs, individualIndex, currentIndSquare.dx, currentIndSquare.dy);
+			currentWaveScores[individualIndex] += reward;
+
+			const outputForTraining = {};
+			OUTPUT_ACTIONS.forEach(action => outputForTraining[action] = 0);
+			outputForTraining[chosenAction] = 1;
+
+			if (!Array.isArray(populationTrainingData[individualIndex])) {
+				populationTrainingData[individualIndex] = [];
+			}
+			populationTrainingData[individualIndex].push({ input: inputs, output: outputForTraining });
+		}
+
+		function calculateReward(action, inputs, individualIndex, moveDx, moveDy) {
+			let reward = 0;
+			reward -= 0.001;
+
+			if (typeof stepsSinceLastCollection !== 'undefined' &&
+				stepsSinceLastCollection.length > individualIndex &&
+				stepsSinceLastCollection[individualIndex] > MAX_STEPS_WITHOUT_COLLECTION) {
+				reward += PENALTY_NO_COLLECTION_SOON;
+			}
+
+			const currentDistanceToCircle = inputs.distanceToClosestCircle;
+			const currentIndSquare = squares[individualIndex];
+			const currentIndLastSquarePos = lastSquarePositions[individualIndex];
+
+			if (currentIndSquare && inputs.distanceToClosestCircle < 1 && (moveDx !== 0 || moveDy !== 0)) {
+				const closestCircleX_abs = inputs.closestCircleX * GAME_WIDTH;
+				const closestCircleY_abs = inputs.closestCircleY * GAME_HEIGHT;
+
+				let vecToCircleX = closestCircleX_abs - (currentIndSquare.x + SQUARE_SIZE / 2);
+				let vecToCircleY = closestCircleY_abs - (currentIndSquare.y + SQUARE_SIZE / 2);
+				const magVecToCircle = Math.sqrt(vecToCircleX * vecToCircleX + vecToCircleY * vecToCircleY);
+
+				if (magVecToCircle > 0) {
+					vecToCircleX /= magVecToCircle;
+					vecToCircleY /= magVecToCircle;
+
+					const magMoveVec = Math.sqrt(moveDx * moveDx + moveDy * moveDy);
+					const moveVecNormX = moveDx / magMoveVec;
+					const moveVecNormY = moveDy / magMoveVec;
+					const dotProduct = (moveVecNormX * vecToCircleX) + (moveVecNormY * vecToCircleY);
+
+					const HEADING_THRESHOLD_POSITIVE = 0.5;
+					const HEADING_THRESHOLD_NEGATIVE = -0.7;
+
+					if (dotProduct > HEADING_THRESHOLD_POSITIVE) {
+						reward += NEW_REWARD_DIRECT_HEADING;
+					} else if (dotProduct < HEADING_THRESHOLD_NEGATIVE) {
+						reward -= NEW_PENALTY_WRONG_HEADING;
+					}
+				}
+			}
+
+			if (currentIndLastSquarePos && currentIndSquare) {
+				const closestCircleX_abs_for_dist_calc = inputs.closestCircleX * GAME_WIDTH;
+				const closestCircleY_abs_for_dist_calc = inputs.closestCircleY * GAME_HEIGHT;
+
+				const prevStepDistanceToCurrentCircle = Math.sqrt(
+					Math.pow(currentIndLastSquarePos.x - closestCircleX_abs_for_dist_calc, 2) +
+					Math.pow(currentIndLastSquarePos.y - closestCircleY_abs_for_dist_calc, 2)
+				) / Math.sqrt(GAME_WIDTH * GAME_WIDTH + GAME_HEIGHT * GAME_HEIGHT);
+
+				if (currentDistanceToCircle < prevStepDistanceToCurrentCircle) {
+					reward += REWARD_MOVE_TOWARDS_CIRCLE;
+				} else if (currentDistanceToCircle > prevStepDistanceToCurrentCircle && inputs.distanceToClosestCircle < 1) {
+					reward -= REWARD_MOVE_TOWARDS_CIRCLE * 0.5;
+				}
+			}
+
+
+			if (action === 'idle') {
+				reward += PENALTY_IDLE;
+			}
+
+			if (inputs.distanceToLeftWall <= 0.01 || inputs.distanceToRightWall <= 0.01 ||
+				inputs.distanceToTopWall <= 0.01 || inputs.distanceToBottomWall <= 0.01) {
+				if ((action === 'left' && inputs.distanceToLeftWall <= 0.01) ||
+					(action === 'right' && inputs.distanceToRightWall <= 0.01) ||
+					(action === 'up' && inputs.distanceToTopWall <= 0.01) ||
+					(action === 'down' && inputs.distanceToBottomWall <= 0.01)) {
+					reward += PENALTY_WALL_COLLISION;
+				} else if (currentIndSquare && (currentIndSquare.x <= 0 || currentIndSquare.x + currentIndSquare.size >= GAME_WIDTH ||
+					currentIndSquare.y <= 0 || currentIndSquare.y + currentIndSquare.size >= GAME_HEIGHT)) {
+					reward += PENALTY_WALL_COLLISION * 0.5;
+				}
+			}
+			return reward;
+		}
+
+		function runGenerationEvaluationStep() {
+			if (!isTraining) {
+				console.log("[runGenerationEvaluationStep] Training stopped.");
+				return;
+			}
+
+			for (let i = 0; i < POPULATION_SIZE; i++) {
+				makeAIDecision(i);
+				updateIndividualGameState(i);
+			}
+
+			currentStepInGeneration++;
+
+			if (currentStepInGeneration < STEPS_PER_GENERATION_EVALUATION) {
+				setTimeout(runGenerationEvaluationStep, 0);
+			} else {
+				processEndOfGenerationEvaluation();
+			}
+		}
+
+		function toggleTraining() {
+			if (isTraining) {
+				stopTraining();
+			} else {
+				startTraining();
+			}
+		}
+
+		function startTraining() {
+			if (isTraining) {
+				console.log("[startTraining] Training is already in progress.");
+				return;
+			}
+			overallBestScore = -Infinity;
+			if (!neuralNetworks || neuralNetworks.length !== POPULATION_SIZE) {
+				statusMessageSpan.textContent = "Erreur: Population de réseaux non (entièrement) initialisée.";
+				statusMessageSpan.className = 'font-bold text-red-400'; // Adjusted for dark theme
+				console.error("[startTraining] Cannot start training, network population is not ready.");
+				if (startButton) startButton.disabled = true;
+				return;
+			}
+
+			isTraining = true;
+			if (startButton) {
+				startButton.textContent = "Arrêter l'entraînement";
+				// Changed classes for stop state
+				startButton.classList.remove('bg-blue-600', 'hover:bg-blue-700', 'focus:ring-blue-500');
+				startButton.classList.add('bg-red-600', 'hover:bg-red-700', 'focus:ring-red-500');
+			}
+
+			currentGeneration = 1;
+			displayedIndividualIndex = 0;
+
+			individualScores = new Array(POPULATION_SIZE).fill(0);
+			currentWaveScores = new Array(POPULATION_SIZE).fill(0);
+			populationTrainingData = new Array(POPULATION_SIZE);
+			for (let i = 0; i < POPULATION_SIZE; i++) {
+				populationTrainingData[i] = [];
+			}
+
+			generateCirclesForGeneration(INITIAL_CIRCLES);
+
+			for (let i = 0; i < POPULATION_SIZE; i++) {
+				initGame(i);
+			}
+
+			currentStepInGeneration = 0;
+
+			epsilon = initialEpsilon;
+			if (epsilonDisplay) epsilonDisplay.textContent = epsilon.toFixed(2);
+
+			if (typeof gameLoopId !== 'undefined' && gameLoopId !== null) {
+				cancelAnimationFrame(gameLoopId);
+			}
+			gameLoopId = requestAnimationFrame(gameLoop);
+
+			console.log("[startTraining] Launching runGenerationEvaluationStep...");
+			runGenerationEvaluationStep();
+		}
+
+		function stopTraining() {
+			if (loadingOverlay) loadingOverlay.classList.add('hidden');
+			isTraining = false;
+			if (startButton) {
+				startButton.textContent = "Lancer l'entraînement";
+				// Changed classes for start state
+				startButton.classList.remove('bg-red-600', 'hover:bg-red-700', 'focus:ring-red-500');
+				startButton.classList.add('bg-blue-600', 'hover:bg-blue-700', 'focus:ring-blue-500');
+			}
+			if (statusMessageSpan) {
+				statusMessageSpan.textContent = "Arrêté par l'utilisateur.";
+				statusMessageSpan.className = 'font-bold text-yellow-400'; // Adjusted for dark theme
+			}
+			console.log("[stopTraining] Training manually stopped by the user.");
+		}
+
+		async function processEndOfGenerationEvaluation() {
+			console.log(\`[processEndOfGenEval] End of Gen. \${currentGeneration} evaluation. Training networks...\`);
+
+			if (loadingOverlay) loadingOverlay.classList.remove('hidden');
+			if (progressBar) progressBar.style.width = '0%';
+			if (loadingText) loadingText.textContent = "Préparation de la nouvelle génération...";
+
+			let totalSteps = POPULATION_SIZE * 2; // 1 pour training, 1 pour creation
+			let completedSteps = 0;
+
+			isTraining = false;
+
+			for (let i = 0; i < POPULATION_SIZE; i++) {
+				const network = neuralNetworks[i];
+				const trainingSet = populationTrainingData[i];
+				if (trainingSet && trainingSet.length > 0 && network && typeof network.train === 'function') {
+					try {
+						await network.train(trainingSet, {
+							iterations: 50,
+							errorThresh: 0.05,
+							log: false,
+							learningRate: 0.1,
+							timeout: 500
+						});
+						completedSteps++;
+						let percentage = (completedSteps / totalSteps) * 100;
+						if (progressBar) progressBar.style.width = percentage + '%';
+						if (loadingText) loadingText.textContent = \`Entraînement des réseaux... \${percentage.toFixed(0)}%\`;
+					} catch (e) {
+						console.error(\`Training error Ind. \${i} Gen. \${currentGeneration}:\`, e);
+					}
+				}
+				individualScores[i] = currentWaveScores[i];
+			}
+			console.log(\`[processEndOfGenEval] Final scores Gen. \${currentGeneration}: [\${individualScores.map(s => s.toFixed(2)).join(', ')}]\`);
+
+			for (const score of individualScores) {
+				if (score > overallBestScore) {
+					overallBestScore = score;
+				}
+			}
+			console.log(\`[processEndOfGenEval] Overall best score updated: \${overallBestScore.toFixed(2)}\`);
+
+			let scoredNetworks = neuralNetworks.map((net, index) => ({
+				index: index,
+				score: individualScores[index],
+				networkJSON: net.toJSON()
+			}));
+			scoredNetworks.sort((a, b) => b.score - a.score);
+
+			console.log("[processEndOfGenEval] Top 5 individuals (original index, score):",
+				scoredNetworks.slice(0, 5).map(s => ({ idx: s.index, score: s.score.toFixed(2) })));
+
+			let nextGenerationData = [];
+
+			for (let i = 0; i < ELITISM_COUNT && i < scoredNetworks.length; i++) {
+				nextGenerationData.push({ json: scoredNetworks[i].networkJSON, wasMutated: false });
+			}
+
+			let childrenNeeded = POPULATION_SIZE - nextGenerationData.length;
+			if (scoredNetworks.length > 0 && childrenNeeded > 0) {
+				const bestParentJSON = scoredNetworks[0].networkJSON;
+				for (let i = 0; i < childrenNeeded; i++) {
+					let parent2Index = (i % (Math.min(4, scoredNetworks.length - 1))) + 1;
+					if (parent2Index >= scoredNetworks.length || parent2Index === 0) {
+						parent2Index = (scoredNetworks.length > 1) ? 1 : 0;
+					}
+					if (scoredNetworks.length > 1 && parent2Index === 0 && scoredNetworks[0].index === scoredNetworks[parent2Index].index) parent2Index = 1;
+
+					const parent2JSON = scoredNetworks[parent2Index] ? scoredNetworks[parent2Index].networkJSON : bestParentJSON;
+					let childJson = crossover(bestParentJSON, parent2JSON);
+					let childMutationResult;
+
+					if (childJson) {
+						childMutationResult = mutate(childJson, MUTATION_RATE, MUTATION_AMOUNT);
+						nextGenerationData.push({ json: childMutationResult.mutatedJson, wasMutated: childMutationResult.didMutate });
+					} else {
+						console.warn("[processEndOfGenEval] Crossover returned null, copying best parent (mutated).");
+						let fallbackChildJson = JSON.parse(JSON.stringify(bestParentJSON));
+						childMutationResult = mutate(fallbackChildJson, MUTATION_RATE, MUTATION_AMOUNT);
+						nextGenerationData.push({ json: childMutationResult.mutatedJson, wasMutated: childMutationResult.didMutate });
+					}
+				}
+			} else if (childrenNeeded > 0) {
+				console.warn("[processEndOfGenEval] No valid networks for reproduction. Filling with new (untrained) networks.");
+				for (let i = 0; i < childrenNeeded; i++) {
+					const tempNet = new brain.NeuralNetwork({ hiddenLayers: [16, 16], activation: 'sigmoid' });
+					nextGenerationData.push({ json: tempNet.toJSON(), wasMutated: false });
+				}
+			}
+
+			// completedSteps ne change pas ici, on met à jour juste le texte
+			let currentPercentageBeforeNewGen = (completedSteps / totalSteps) * 100;
+			if (loadingText) loadingText.textContent = \`Création de la nouvelle génération... \${currentPercentageBeforeNewGen.toFixed(0)}%\`;
+
+			const newNeuralNetworks = [];
+			for (let i = 0; i < POPULATION_SIZE; i++) {
+				let networkDataEntry = nextGenerationData[i];
+				let netJSON;
+
+				if (!networkDataEntry || !networkDataEntry.json) {
+					console.warn(\`[processEndOfGenEval] Missing JSON for individual \${i}, creating a new network.\`);
+					const tempNetForFill = new brain.NeuralNetwork({ hiddenLayers: [16, 16], activation: 'sigmoid' });
+					netJSON = tempNetForFill.toJSON();
+					networkDataEntry = { json: netJSON, wasMutated: false };
+				} else {
+					netJSON = networkDataEntry.json;
+				}
+
+				try {
+					const net = new window.brain.NeuralNetwork().fromJSON(netJSON);
+					net.wasMutatedThisGeneration = networkDataEntry.wasMutated;
+
+					if (net.wasMutatedThisGeneration) {
+						let newColorIndex = Math.floor(Math.random() * individualColors.length);
+						if (individualColors.length > 1 && newColorIndex === (i % individualColors.length)) {
+							newColorIndex = (newColorIndex + 1) % individualColors.length;
+						}
+						net.colorDisplay = individualColors[newColorIndex];
+						console.log(\`Individual \${i} mutated and receives new color: \${net.colorDisplay}\`);
+					} else {
+						net.colorDisplay = individualColors[i % individualColors.length];
+					}
+					newNeuralNetworks.push(net);
+					completedSteps++;
+					percentage = (completedSteps / totalSteps) * 100; // 'percentage' est déjà déclaré avec let plus haut
+					if (progressBar) progressBar.style.width = percentage + '%';
+					if (loadingText) loadingText.textContent = \`Création de la nouvelle génération... \${percentage.toFixed(0)}%\`;
+				} catch (e) {
+					console.error(\`fromJSON error for individual \${i}, using fallback.\`, e, netJSON);
+					const fallbackNet = new window.brain.NeuralNetwork({ hiddenLayers: [16, 16], activation: 'sigmoid' });
+					fallbackNet.wasMutatedThisGeneration = false;
+					fallbackNet.colorDisplay = individualColors[i % individualColors.length];
+					newNeuralNetworks.push(fallbackNet);
+				}
+			}
+			neuralNetworks = newNeuralNetworks;
+
+			savePopulation();
+
+			currentGeneration++;
+			displayedIndividualIndex = 0; // Reset display index for the new generation
+
+			if (progressBar) progressBar.style.width = '100%';
+			if (loadingText) loadingText.textContent = "Terminé ! Reprise...";
+
+			setTimeout(() => {
+				if (loadingOverlay) loadingOverlay.classList.add('hidden');
+
+				// Code original qui était à la fin de la fonction pour continuer ou arrêter l'entraînement
+				if (currentGeneration > MAX_WAVES) {
+					console.log("[processEndOfGenEval] Maximum number of generations reached.");
+					endTrainingSession(); // endTrainingSession s'occupera de masquer l'overlay au cas où.
+					return;
+				}
+
+				isTraining = true; // S'assurer que cela est bien défini avant de continuer
+
+				console.log(\`[processEndOfGenEval] Preparing Generation \${currentGeneration}. Displayed individual: 0 (Champion)\`);
+				// ... (le reste du code de préparation de la nouvelle génération qui était déjà là) ...
+				// initGame, epsilon update etc.
+
+				// Assurez-vous que toutes les initialisations sont faites avant de masquer complètement
+				// et de relancer. Le setTimeout englobe maintenant la reprise.
+
+				currentStepInGeneration = 0;
+				currentWaveScores = new Array(POPULATION_SIZE).fill(0);
+				for (let i = 0; i < POPULATION_SIZE; i++) {
+					populationTrainingData[i] = [];
+				}
+
+				generateCirclesForGeneration(INITIAL_CIRCLES);
+				for (let i = 0; i < POPULATION_SIZE; i++) {
+					initGame(i); // S'assurer que initGame est appelé avant de potentiellement dessiner
+				}
+
+				if (MAX_WAVES > 1) {
+					epsilon = Math.max(finalEpsilon, initialEpsilon - (initialEpsilon - finalEpsilon) * ((currentGeneration - 1) / (MAX_WAVES - 1)));
+				} else {
+					epsilon = finalEpsilon;
+				}
+				if (epsilonDisplay) epsilonDisplay.textContent = epsilon.toFixed(2);
+
+				if (isTraining) { // Vérifier à nouveau au cas où stopTraining aurait été appelé pendant le timeout
+					 runGenerationEvaluationStep();
+				}
+
+			}, 750); // Délai pour que l'utilisateur voie "Terminé !"
+		}
+
+		function crossover(networkJSON1, networkJSON2) {
+			if (!networkJSON1 || !networkJSON2) {
+				console.error("Crossover: One or both parents are undefined.");
+				return networkJSON1 || networkJSON2 || null;
+			}
+
+			let childJSON = JSON.parse(JSON.stringify(networkJSON1));
+
+			for (let l = 1; l < childJSON.layers.length; l++) {
+				const layer1 = networkJSON1.layers[l];
+				const layer2 = networkJSON2.layers[l];
+				const childLayer = childJSON.layers[l];
+
+				if (!layer1 || !layer2 || !childLayer) {
+					continue;
+				}
+
+				if (childLayer.biases && layer1.biases && layer2.biases) {
+					if (Array.isArray(childLayer.biases)) {
+						for (let i = 0; i < childLayer.biases.length; i++) {
+							if (layer1.biases[i] !== undefined && layer2.biases[i] !== undefined) {
+								childLayer.biases[i] = (layer1.biases[i] + layer2.biases[i]) / 2;
+							}
+						}
+					} else {
+						for (const neuronIdx in childLayer.biases) {
+							if (layer1.biases.hasOwnProperty(neuronIdx) && layer2.biases.hasOwnProperty(neuronIdx)) {
+								childLayer.biases[neuronIdx] = (layer1.biases[neuronIdx] + layer2.biases[neuronIdx]) / 2;
+							}
+						}
+					}
+				}
+
+				if (childLayer.weights && layer1.weights && layer2.weights) {
+					if (Array.isArray(childLayer.weights)) {
+						for (let i = 0; i < childLayer.weights.length; i++) {
+							if (layer1.weights[i] && layer2.weights[i] && Array.isArray(childLayer.weights[i])) {
+								for (let j = 0; j < childLayer.weights[i].length; j++) {
+									if (layer1.weights[i][j] !== undefined && layer2.weights[i][j] !== undefined) {
+										childLayer.weights[i][j] = (layer1.weights[i][j] + layer2.weights[i][j]) / 2;
+									}
+								}
+							}
+						}
+					} else {
+						for (const neuronIdx in layer.weights) {
+							if (layer1.weights.hasOwnProperty(neuronIdx) && layer2.weights.hasOwnProperty(neuronIdx) &&
+								Array.isArray(layer.weights[neuronIdx])) {
+								const weights1 = layer1.weights[neuronIdx];
+								const weights2 = layer2.weights[neuronIdx];
+								const childWeightsNeuron = layer.weights[neuronIdx];
+								for (let j = 0; j < childWeightsNeuron.length; j++) {
+									if (weights1[j] !== undefined && weights2[j] !== undefined) {
+										childWeightsNeuron[j] = (weights1[j] + weights2[j]) / 2;
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+			return childJSON;
+		}
+
+		function mutate(networkJSON, rate, amount) {
+			if (!networkJSON || !networkJSON.layers) {
+				console.error("Mutate: networkJSON undefined or without layers.");
+				return { mutatedJson: networkJSON, didMutate: false };
+			}
+
+			let actualMutationOccurred = false;
+
+			for (let l = 1; l < networkJSON.layers.length; l++) {
+				const layer = networkJSON.layers[l];
+				if (!layer) continue;
+
+				if (layer.biases) {
+					if (Array.isArray(layer.biases)) {
+						for (let i = 0; i < layer.biases.length; i++) {
+							if (Math.random() < rate) {
+								layer.biases[i] += (Math.random() * 2 - 1) * amount;
+								actualMutationOccurred = true;
+							}
+						}
+					} else {
+						for (const neuronIdx in layer.biases) {
+							if (layer.biases.hasOwnProperty(neuronIdx)) {
+								if (Math.random() < rate) {
+									layer.biases[neuronIdx] += (Math.random() * 2 - 1) * amount;
+									actualMutationOccurred = true;
+								}
+							}
+						}
+					}
+				}
+
+				if (layer.weights) {
+					if (Array.isArray(layer.weights)) {
+						for (let i = 0; i < layer.weights.length; i++) {
+							if (layer.weights[i] && Array.isArray(layer.weights[i])) {
+								for (let j = 0; j < layer.weights[i].length; j++) {
+									if (Math.random() < rate) {
+										layer.weights[i][j] += (Math.random() * 2 - 1) * amount;
+										actualMutationOccurred = true;
+									}
+								}
+							}
+						}
+					} else {
+						for (const neuronIdx in layer.weights) {
+							if (layer.weights.hasOwnProperty(neuronIdx) && Array.isArray(layer.weights[neuronIdx])) {
+								const weightsNeuron = layer.weights[neuronIdx];
+								for (let j = 0; j < weightsNeuron.length; j++) {
+									if (Math.random() < rate) {
+										weightsNeuron[j] += (Math.random() * 2 - 1) * amount;
+										actualMutationOccurred = true;
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+			return { mutatedJson: networkJSON, didMutate: actualMutationOccurred };
+		}
+
+		function endTrainingSession() {
+			if (loadingOverlay) loadingOverlay.classList.add('hidden');
+			isTraining = false;
+			if (statusMessageSpan) {
+				statusMessageSpan.textContent = "Entraînement terminé ! (Max Générations)";
+				statusMessageSpan.className = 'font-bold text-green-400'; // Adjusted for dark theme
+			}
+			if (startButton) {
+				startButton.textContent = "Lancer l'entraînement";
+				// Changed classes for start state
+				startButton.classList.remove('bg-red-600', 'hover:bg-red-700', 'focus:ring-red-500');
+				startButton.classList.add('bg-blue-600', 'hover:bg-blue-700', 'focus:ring-blue-500');
+			}
+			console.log(\`[endTrainingSession] Full training completed after \${currentGeneration - 1} generations.\`);
+
+			if (neuralNetworks && neuralNetworks.length > 0 && neuralNetworks[0]) {
+				const bestNetwork = neuralNetworks[0];
+				const bestScore = individualScores[0];
+
+				console.log(\`[endTrainingSession] Best individual (current elite): Index 0, Approx. Score: \${bestScore ? bestScore.toFixed(2) : 'N/A'}\`);
+				try {
+					const bestNetJSON = bestNetwork.toJSON();
+					const jsonString = JSON.stringify(bestNetJSON, null, 2);
+					const blob = new Blob([jsonString], { type: "application/json" });
+					const url = URL.createObjectURL(blob);
+					const a = document.createElement('a');
+					a.href = url;
+					a.download = 'best_individual_weights.json';
+					document.body.appendChild(a);
+					a.click();
+					document.body.removeChild(a);
+					URL.revokeObjectURL(url);
+					console.log("Best individual weights downloaded to best_individual_weights.json");
+				} catch (e) {
+					console.error("Error saving best individual:", e);
+				}
+			} else {
+				console.warn("[endTrainingSession] No best individual found to save (empty or uninitialized population).");
+			}
+			updateUI(); // Ensure UI is updated one last time
+		}
+
+		function updateUI(individualIndexToDisplay = displayedIndividualIndex) {
+			// If showGhostIndividuals is true, we want to display the score of the focused individual
+			// Otherwise, we display the score of the initially displayed individual (usually index 0)
+			const displayIdx = showGhostIndividuals ? currentFocusedIndividual : individualIndexToDisplay;
+
+			if (currentWaveScores && currentWaveScores.length > displayIdx) {
+				currentScoreSpan.textContent = currentWaveScores[displayIdx].toFixed(0);
+			} else {
+				currentScoreSpan.textContent = "0";
+			}
+
+			waveNumberSpan.textContent = currentGeneration;
+			epsilonDisplay.textContent = epsilon.toFixed(2);
+
+			if (isTraining) {
+				statusMessageSpan.textContent = \`Meilleur Score Global: \${overallBestScore.toFixed(2)}\`;
+				// Adjusted status message colors
+				if (overallBestScore >= 0) {
+					statusMessageSpan.className = 'font-bold text-green-400';
+				} else {
+					statusMessageSpan.className = 'font-bold text-orange-400';
+				}
+			}
+		}
+
+		function savePopulation() {
+			if (neuralNetworks.length === 0) return;
+			try {
+				const populationJson = neuralNetworks.map(net => {
+					if (net && typeof net.toJSON === 'function') {
+						return net.toJSON();
+					}
+					console.warn("[savePopulation] A network in the population could not be converted to JSON or is undefined.");
+					return null;
+				}).filter(json => json !== null);
+
+				if (populationJson.length > 0) {
+					localStorage.setItem('populationNeuralNetworkWeights_v1', JSON.stringify(populationJson));
+					console.log("Neural network population weights saved.");
+				} else {
+					console.warn("[savePopulation] No valid networks to save in the population.");
+				}
+			} catch (error) {
+				console.error("Error saving neural network population:", error);
+			}
+		}
+
+		async function loadNeuralNetwork() {
+			const savedPopulationWeights = localStorage.getItem('populationNeuralNetworkWeights_v1');
+			if (savedPopulationWeights) {
+				try {
+					const populationJson = JSON.parse(savedPopulationWeights);
+					if (!window.brain || !window.brain.NeuralNetwork) {
+						console.error("Brain.js is not available to load networks.");
+						await createNewNeuralNetwork();
+						return;
+					}
+					if (Array.isArray(populationJson) && populationJson.length === POPULATION_SIZE) {
+						neuralNetworks = [];
+						for (let i = 0; i < POPULATION_SIZE; i++) {
+							const net = new window.brain.NeuralNetwork().fromJSON(populationJson[i]);
+							net.colorDisplay = individualColors[i % individualColors.length];
+							neuralNetworks.push(net);
+						}
+						console.log(\`\${POPULATION_SIZE} neural networks loaded from localStorage.\`);
+						if (statusMessageSpan) statusMessageSpan.textContent = "Prêt (Population chargée)";
+						return;
+					} else {
+						console.log("Données de population sauvegardées non valides ou taille incorrecte. Création de nouveaux réseaux.");
+					}
+				} catch (error) {
+					console.error("Erreur lors du chargement des poids de la population:", error);
+				}
+			}
+			await createNewNeuralNetwork();
+		}
+
+		async function createNewNeuralNetwork() {
+			if (!window.brain || !window.brain.NeuralNetwork) {
+				console.error("Brain.js is not available to create new networks.");
+				statusMessageSpan.textContent = "Erreur: Brain.js manquant.";
+				if (startButton) startButton.disabled = true;
+				return;
+			}
+			neuralNetworks = [];
+			let allInitialized = true;
+			console.log(\`[createNewNeuralNetwork] Initializing \${POPULATION_SIZE} new networks.\`);
+			for (let i = 0; i < POPULATION_SIZE; i++) {
+				const net = new window.brain.NeuralNetwork({
+					hiddenLayers: [16, 16],
+					activation: 'sigmoid',
+				});
+
+				try {
+					const dummyInput = {
+						squareX: 0.5, squareY: 0.5, closestCircleX: 0.5, closestCircleY: 0.5,
+						distanceToClosestCircle: 0.5, distanceToLeftWall: 0.5, distanceToRightWall: 0.5,
+						distanceToTopWall: 0.5, distanceToBottomWall: 0.5
+					};
+					const dummyOutput = { idle: 0, up: 0, down: 0, left: 0, right: 0 };
+					OUTPUT_ACTIONS.forEach(action => dummyOutput[action] = 0);
+					dummyOutput["idle"] = 1;
+
+					await net.train([{ input: dummyInput, output: dummyOutput }], {
+						iterations: 1, errorThresh: 0.9, log: false, learningRate: 0.01, timeout: 100
+					});
+					net.colorDisplay = individualColors[i % individualColors.length];
+					neuralNetworks.push(net);
+				} catch (e) {
+					console.error(\`Error during initial dummy training for network \${i}:\`, e);
+					allInitialized = false;
+					break;
+				}
+			}
+
+			if (allInitialized && neuralNetworks.length === POPULATION_SIZE) {
+				console.log(\`\${POPULATION_SIZE} new neural networks created and initialized.\`);
+				if (statusMessageSpan) statusMessageSpan.textContent = "Prêt (Nouvelle population de réseaux)";
+			} else {
+				neuralNetworks = [];
+				if (statusMessageSpan) {
+					statusMessageSpan.textContent = "Erreur d'initialisation de la population.";
+					statusMessageSpan.classList.remove('text-yellow-400'); // Adjusted for dark theme
+					statusMessageSpan.classList.add('text-red-400'); // Adjusted for dark theme
+				}
+				if (startButton) startButton.disabled = true;
+			}
+		}
+	</script>
+</body>
+
+</html>
