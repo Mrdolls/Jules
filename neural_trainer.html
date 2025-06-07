@@ -88,7 +88,6 @@
         const INITIAL_CIRCLES = 5;
         const WAVE_DURATION = 5000; // 5 secondes en millisecondes pour une vague (génération)
         const MAX_WAVES = 100;
-        // const AI_DECISION_INTERVAL = 100; // L\'IA prend une décision toutes les 100 ms // Removed old
 
         // Récompenses et pénalités
         const REWARD_COLLECT_CIRCLE = 25;
@@ -102,7 +101,7 @@
 
         // Constantes pour le mécanisme d'impatience
         const MAX_STEPS_WITHOUT_COLLECTION = 75;
-        const PENALTY_NO_COLLECTION_SOON = -0.5; // Pénalité négative, sera ajoutée à la récompense
+        const PENALTY_NO_COLLECTION_SOON = -0.5;
 
         // Variables du jeu
         let canvas, ctx;
@@ -114,8 +113,7 @@
         const MUTATION_AMOUNT = 0.15;
 
         // --- Fixed Simulation Parameters ---
-        // const WAVE_DURATION = 2000; // Value now taken from the top definition, this comment can be removed or kept.
-        const AI_DECISION_INTERVAL = 4; // L'IA prend une décision toutes les 4 ms
+        const AI_DECISION_INTERVAL = 4;
         const STEPS_PER_GENERATION_EVALUATION = WAVE_DURATION / AI_DECISION_INTERVAL;
 
         // --- Population State Variables ---
@@ -127,7 +125,7 @@
             "rgba(20, 184, 166, 0.9)", "rgba(249, 115, 22, 0.9)", "rgba(107, 114, 128, 0.9)",
             "rgba(163, 230, 53, 0.9)"
         ];
-        let currentIndividualIndex = 0; // Primarily for loops, displayedIndividualIndex is for rendering
+        let currentIndividualIndex = 0;
         let currentGeneration = 1;
         let currentGenerationCircleData = [];
 
@@ -136,7 +134,7 @@
         let populationCircles = new Array(POPULATION_SIZE);
         let currentWaveScores = new Array(POPULATION_SIZE).fill(0);
         let populationTrainingData = new Array(POPULATION_SIZE);
-        for (let i = 0; i < POPULATION_SIZE; i++) { // Initialize inner arrays for training data
+        for (let i = 0; i < POPULATION_SIZE; i++) {
             populationTrainingData[i] = [];
         }
         let lastSquarePositions = new Array(POPULATION_SIZE);
@@ -144,25 +142,23 @@
 
         // --- Simulation Step Tracking ---
         let currentStepInGeneration = 0;
-        let displayedIndividualIndex = 0; // Index of the NN to display
+        let displayedIndividualIndex = 0;
 
-        let isTraining = false; // Will be managed by GA logic
+        let isTraining = false;
         let gameLoopId;
         let showGhostIndividuals = false;
+        let overallBestScore = -Infinity;
 
         // Variables pour la gestion de l'inertie du focus en mode fantôme
         let currentFocusedIndividual = 0;
         let candidateForFocus = 0;
         let framesAsCandidate = 0;
-        const FOCUS_CHANGE_THRESHOLD_FRAMES = 15; // ~0.25s à 60fps, ajustable
-        // Old timer IDs (aiDecisionIntervalId, waveTimerId) removed.
-        // Old single-instance state variables (neuralNetwork, square, circles, score, wave, trainingData, lastSquarePosition) removed.
+        const FOCUS_CHANGE_THRESHOLD_FRAMES = 15;
 
         // Exploration (Epsilon-greedy)
-        let epsilon = 0.5; // Initial exploration rate
+        let epsilon = 0.5;
         const initialEpsilon = 0.5;
-        const finalEpsilon = 0.01; // Minimum exploration rate
-        // Epsilon will decay linearly over MAX_WAVES
+        const finalEpsilon = 0.01;
 
         const OUTPUT_ACTIONS = ['idle', 'up', 'down', 'left', 'right'];
 
@@ -185,26 +181,24 @@
             statusMessageSpan.textContent = "Chargement de la bibliothèque de réseau de neurones...";
 
             const brainScript = document.createElement('script');
-            brainScript.src = "https://cdnjs.cloudflare.com/ajax/libs/brain.js/2.0.0-beta.24/browser.min.js"; // THIS LINE WILL BE REPLACED by sed
-            brainScript.async = true; // Added async attribute
+            brainScript.src = "https://cdnjs.cloudflare.com/ajax/libs/brain.js/2.0.0-beta.24/browser.min.js";
+            brainScript.async = true;
 
             brainScript.onload = async () => {
                 console.log("Brain.js chargé.");
                 if (typeof brain === 'undefined') {
                     console.error("Brain.js n\'est pas correctement chargé sur l\'objet window.");
                     statusMessageSpan.textContent = "Erreur critique: Brain.js non trouvé.";
-                    statusMessageSpan.classList.remove('text-yellow-600');
-                    statusMessageSpan.classList.add('text-red-600');
-                    startButton.disabled = true; // Disable start if brain.js is missing
+                    statusMessageSpan.className = 'font-bold text-red-600'; // className update
+                    startButton.disabled = true;
                     return;
                 }
                 await loadNeuralNetwork();
-                initGame(displayedIndividualIndex); // Initialize for the first displayed individual
+                initGame(displayedIndividualIndex);
 
                 startButton.disabled = false;
                 statusMessageSpan.textContent = "Prêt à commencer l\'entraînement.";
-                statusMessageSpan.classList.remove('text-yellow-600');
-                statusMessageSpan.classList.add('text-green-600');
+                statusMessageSpan.className = 'font-bold text-green-600'; // className update
 
                 startButton.addEventListener('click', toggleTraining);
 
@@ -253,7 +247,7 @@
                     loadJsonToInd0Button.addEventListener('click', () => {
                         if (uploadWeightsFile.files.length === 0) {
                             statusMessageSpan.textContent = "Veuillez d'abord sélectionner un fichier JSON.";
-                            statusMessageSpan.className = 'font-bold text-red-600'; // Reset classes
+                            statusMessageSpan.className = 'font-bold text-red-600';
                             return;
                         }
 
@@ -275,8 +269,6 @@
 
                                 if (!neuralNetworks || neuralNetworks.length !== POPULATION_SIZE) {
                                     console.warn("La population de réseaux n'était pas initialisée. Tentative d'initialisation...");
-                                    // await createNewNeuralNetwork(); // Décommenter si on veut forcer la création.
-                                                                 // Attention, createNewNeuralNetwork est async.
                                     if (!neuralNetworks || neuralNetworks.length !== POPULATION_SIZE) {
                                         throw new Error("Impossible d'initialiser la population de réseaux.");
                                     }
@@ -292,7 +284,6 @@
 
                                 if (typeof initGame === 'function' && typeof draw === 'function') {
                                     initGame(0);
-                                    // displayedIndividualIndex = 0;
                                     draw();
                                 }
                                 uploadWeightsFile.value = '';
@@ -312,17 +303,15 @@
                     });
                 }
 
-                // Initialize lastSquarePosition only if squares[displayedIndividualIndex] is defined (after initGame)
                 if (squares && squares[displayedIndividualIndex]) {
                     lastSquarePosition = { x: squares[displayedIndividualIndex].x, y: squares[displayedIndividualIndex].y };
                 }
             };
             brainScript.onerror = () => {
                 statusMessageSpan.textContent = "Erreur de chargement de Brain.js. Veuillez vérifier votre connexion et réessayer.";
-                statusMessageSpan.classList.remove('text-yellow-600');
-                statusMessageSpan.classList.add('text-red-600');
+                statusMessageSpan.className = 'font-bold text-red-600'; // className update
                 console.error("Failed to load brain.js script.");
-                startButton.disabled = true; // Disable start if brain.js fails to load
+                startButton.disabled = true;
             };
             document.head.appendChild(brainScript);
         });
@@ -777,8 +766,10 @@ function startTraining() {
         console.log("[startTraining] L'entraînement est déjà en cours.");
         return;
     }
+    overallBestScore = -Infinity;
     if (!neuralNetworks || neuralNetworks.length !== POPULATION_SIZE) {
         statusMessageSpan.textContent = "Erreur: Population de réseaux non (entièrement) initialisée.";
+        statusMessageSpan.className = 'font-bold text-red-600';
         console.error("[startTraining] Impossible de démarrer l'entraînement, la population de réseaux n'est pas prête.");
         if(startButton) startButton.disabled = true;
         return;
@@ -801,11 +792,12 @@ function startTraining() {
         populationTrainingData[i] = [];
     }
 
-    if(statusMessageSpan) {
-        statusMessageSpan.textContent = `Initialisation Gén. ${currentGeneration}, Ind. ${displayedIndividualIndex + 1}/${POPULATION_SIZE}...`;
-        statusMessageSpan.classList.remove('text-yellow-600', 'text-green-600', 'text-purple-600');
-        statusMessageSpan.classList.add('text-blue-600');
-    }
+    // Ligne supprimée/commentée pour statusMessageSpan.textContent
+    // if(statusMessageSpan) {
+    //     statusMessageSpan.textContent = `Initialisation Gén. ${currentGeneration}, Ind. ${displayedIndividualIndex + 1}/${POPULATION_SIZE}...`;
+    //     statusMessageSpan.classList.remove('text-yellow-600', 'text-green-600', 'text-purple-600');
+    //     statusMessageSpan.classList.add('text-blue-600');
+    // }
 
     generateCirclesForGeneration(INITIAL_CIRCLES);
 
@@ -838,16 +830,18 @@ function stopTraining() {
     }
     if(statusMessageSpan) {
         statusMessageSpan.textContent = "Arrêté par l'utilisateur.";
-        statusMessageSpan.classList.remove('text-blue-600', 'text-green-600', 'text-purple-600');
-        statusMessageSpan.classList.add('text-yellow-600');
+        statusMessageSpan.className = 'font-bold text-yellow-600';
     }
     console.log("[stopTraining] Entraînement arrêté manuellement par l'utilisateur.");
     updateUI();
 }
 
 async function processEndOfGenerationEvaluation() {
+    // Ligne supprimée/commentée pour statusMessageSpan.textContent
+    // console.log(`[processEndOfGenEval] Fin évaluation Gén. ${currentGeneration}. Entraînement des réseaux...`);
+    // if(statusMessageSpan) statusMessageSpan.textContent = `Gén. ${currentGeneration} terminée. Entraînement IA...`;
     console.log(`[processEndOfGenEval] Fin évaluation Gén. ${currentGeneration}. Entraînement des réseaux...`);
-    if(statusMessageSpan) statusMessageSpan.textContent = `Gén. ${currentGeneration} terminée. Entraînement IA...`;
+
 
     isTraining = false;
 
@@ -870,6 +864,13 @@ async function processEndOfGenerationEvaluation() {
         individualScores[i] = currentWaveScores[i];
     }
     console.log(`[processEndOfGenEval] Scores finaux Gén. ${currentGeneration}: [${individualScores.map(s => s.toFixed(2)).join(', ')}]`);
+
+    for (const score of individualScores) {
+        if (score > overallBestScore) {
+            overallBestScore = score;
+        }
+    }
+    console.log(`[processEndOfGenEval] Meilleur score global mis à jour : ${overallBestScore.toFixed(2)}`);
 
     let scoredNetworks = neuralNetworks.map((net, index) => ({
         index: index,
@@ -990,7 +991,8 @@ async function processEndOfGenerationEvaluation() {
     }
     if(epsilonDisplay) epsilonDisplay.textContent = epsilon.toFixed(2);
 
-    if(statusMessageSpan) statusMessageSpan.textContent = `Prêt pour Gén. ${currentGeneration}, Ind. ${displayedIndividualIndex + 1}/${POPULATION_SIZE}...`;
+    // Ligne supprimée/commentée pour statusMessageSpan.textContent
+    // if(statusMessageSpan) statusMessageSpan.textContent = `Prêt pour Gén. ${currentGeneration}, Ind. ${displayedIndividualIndex + 1}/${POPULATION_SIZE}...`;
     updateUI();
 
     runGenerationEvaluationStep();
@@ -1126,8 +1128,7 @@ function endTrainingSession() {
     isTraining = false;
     if(statusMessageSpan) {
         statusMessageSpan.textContent = "Entraînement terminé ! (Max Générations)";
-        statusMessageSpan.classList.remove('text-yellow-600', 'text-blue-600', 'text-purple-600');
-        statusMessageSpan.classList.add('text-green-600');
+        statusMessageSpan.className = 'font-bold text-green-600';
     }
     if(startButton) {
         startButton.textContent = "Lancer l'entraînement";
@@ -1175,8 +1176,13 @@ function updateUI() {
     waveNumberSpan.textContent = currentGeneration;
     epsilonDisplay.textContent = epsilon.toFixed(2);
 
-    if (isTraining && currentStepInGeneration > 0 && currentStepInGeneration <= STEPS_PER_GENERATION_EVALUATION) {
-        statusMessageSpan.textContent = `Gén. ${currentGeneration}, Ind. ${displayIdx + 1}/${POPULATION_SIZE}, Étape ${currentStepInGeneration}/${STEPS_PER_GENERATION_EVALUATION}`;
+    if (isTraining) {
+        statusMessageSpan.textContent = `Meilleur Score Global: ${overallBestScore.toFixed(2)}`;
+        if (overallBestScore >= 0) {
+           statusMessageSpan.className = 'font-bold text-green-700';
+        } else {
+           statusMessageSpan.className = 'font-bold text-orange-600';
+        }
     }
 }
 
@@ -1286,5 +1292,3 @@ async function createNewNeuralNetwork() {
     </script>
 </body>
 </html>
-
-[end of neural_trainer.html]
