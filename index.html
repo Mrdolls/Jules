@@ -1351,10 +1351,11 @@
 			if (progressBar) progressBar.style.width = '0%';
 			if (loadingText) loadingText.textContent = `Préparation de la nouvelle génération...`;
 
+    // Mettre isTraining à false APRÈS s'être assuré que la barre est visible
+    isTraining = false;
+
 			let totalSteps = POPULATION_SIZE * 2; // 1 pour training, 1 pour creation
 			let completedSteps = 0;
-
-			isTraining = false;
 
 			for (let i = 0; i < POPULATION_SIZE; i++) {
 				const network = neuralNetworks[i];
