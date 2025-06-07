@@ -44,6 +44,22 @@
                 Afficher Fantômes
             </button>
 
+    <!-- NOUVEAUX ÉLÉMENTS POUR LE CHARGEMENT DE FICHIER -->
+    <div class="mt-4 pt-4 border-t border-gray-200">
+        <label for="uploadWeightsFile" class="block text-sm font-medium text-gray-700">Charger poids pour l'Individu 0 (JSON):</label>
+        <input type="file" id="uploadWeightsFile" accept=".json" class="mt-1 block w-full text-sm text-gray-500
+                                                                      file:mr-4 file:py-2 file:px-4
+                                                                      file:rounded-full file:border-0
+                                                                      file:text-sm file:font-semibold
+                                                                      file:bg-violet-50 file:text-violet-700
+                                                                      hover:file:bg-violet-100"/>
+        <button id="loadJsonToInd0Button"
+                class="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg shadow-md transition duration-300 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:ring-opacity-75 mt-2 text-sm w-full">
+            Appliquer JSON à l'Individu 0
+        </button>
+    </div>
+    <!-- NOUVEAUX ÉLÉMENTS FIN -->
+
             <div class="mt-auto pt-4 border-t border-gray-200">
                 <h2 class="text-xl font-semibold text-gray-800 mb-2">Instructions:</h2>
                 <ul class="list-disc list-inside text-gray-600 text-sm">
@@ -193,7 +209,7 @@
                 startButton.addEventListener('click', toggleTraining);
 
                 const toggleGhostDisplayButton = document.getElementById('toggleGhostDisplayButton');
-                if (toggleGhostDisplayButton) { // S'assurer que le bouton existe avant d'ajouter l'écouteur
+                if (toggleGhostDisplayButton) {
                     toggleGhostDisplayButton.addEventListener('click', () => {
                         showGhostIndividuals = !showGhostIndividuals;
 
@@ -202,10 +218,9 @@
                             toggleGhostDisplayButton.classList.remove('bg-sky-500', 'hover:bg-sky-600', 'focus:ring-sky-400');
                             toggleGhostDisplayButton.classList.add('bg-amber-500', 'hover:bg-amber-600', 'focus:ring-amber-400');
 
-                            // --- NOUVELLE LOGIQUE D'INITIALISATION DU FOCUS ---
                             if (Array.isArray(currentWaveScores) && currentWaveScores.length === POPULATION_SIZE) {
                                 let bestScore = -Infinity;
-                                let bestIndex = 0; // Défaut à 0 si aucun score n'est > -Infinity
+                                let bestIndex = 0;
                                 for (let i = 0; i < POPULATION_SIZE; i++) {
                                     if (currentWaveScores[i] > bestScore) {
                                         bestScore = currentWaveScores[i];
@@ -214,35 +229,91 @@
                                 }
                                 currentFocusedIndividual = bestIndex;
                                 candidateForFocus = bestIndex;
-                                // Mettre framesAsCandidate au seuil pour un focus immédiat sur le meilleur actuel,
-                                // ou à 0 pour que le délai s'applique même au premier.
-                                // Pour un effet immédiat, utiliser FOCUS_CHANGE_THRESHOLD_FRAMES.
                                 framesAsCandidate = FOCUS_CHANGE_THRESHOLD_FRAMES;
                             } else {
-                                // Pas de scores, initialiser au comportement par défaut
                                 currentFocusedIndividual = displayedIndividualIndex;
                                 candidateForFocus = displayedIndividualIndex;
                                 framesAsCandidate = 0;
                             }
-                            // --- FIN NOUVELLE LOGIQUE ---
-
                         } else {
                             toggleGhostDisplayButton.textContent = 'Afficher Fantômes';
                             toggleGhostDisplayButton.classList.remove('bg-amber-500', 'hover:bg-amber-600', 'focus:ring-amber-400');
-                            toggleGhostDisplayButton.classList.add('bg-sky-500', 'hover:bg-sky-600', 'focus:ring-sky-400'); // Revenir à la couleur initiale
-                            // La réinitialisation des variables de focus se fait maintenant dans draw() quand showGhostIndividuals est false.
+                            toggleGhostDisplayButton.classList.add('bg-sky-500', 'hover:bg-sky-600', 'focus:ring-sky-400');
                         }
-
-                        // Si le jeu n'est pas activement en train de tourner (pas de boucle d'animation),
-                        // et que le canvas et le contexte sont prêts, forcer un redessin.
                         if (!isTraining && ctx && typeof draw === 'function') {
                             draw();
                         }
                     });
                 }
 
-                // Initialize lastSquarePosition only if square is defined (after initGame)
-                if (square) { // This should be squares[displayedIndividualIndex] or similar
+                const uploadWeightsFile = document.getElementById('uploadWeightsFile');
+                const loadJsonToInd0Button = document.getElementById('loadJsonToInd0Button');
+
+                if (loadJsonToInd0Button && uploadWeightsFile) {
+                    loadJsonToInd0Button.addEventListener('click', () => {
+                        if (uploadWeightsFile.files.length === 0) {
+                            statusMessageSpan.textContent = "Veuillez d'abord sélectionner un fichier JSON.";
+                            statusMessageSpan.className = 'font-bold text-red-600'; // Reset classes
+                            return;
+                        }
+
+                        const file = uploadWeightsFile.files[0];
+                        if (file.type !== "application/json") {
+                            statusMessageSpan.textContent = "Type de fichier invalide. Veuillez sélectionner un fichier .json.";
+                            statusMessageSpan.className = 'font-bold text-red-600';
+                            return;
+                        }
+
+                        const reader = new FileReader();
+                        reader.onload = (event) => {
+                            try {
+                                const jsonData = JSON.parse(event.target.result);
+
+                                if (typeof jsonData !== 'object' || jsonData === null || (!jsonData.layers && !jsonData.sizes)) {
+                                    throw new Error("Structure JSON invalide pour un réseau Brain.js.");
+                                }
+
+                                if (!neuralNetworks || neuralNetworks.length !== POPULATION_SIZE) {
+                                    console.warn("La population de réseaux n'était pas initialisée. Tentative d'initialisation...");
+                                    // await createNewNeuralNetwork(); // Décommenter si on veut forcer la création.
+                                                                 // Attention, createNewNeuralNetwork est async.
+                                    if (!neuralNetworks || neuralNetworks.length !== POPULATION_SIZE) {
+                                        throw new Error("Impossible d'initialiser la population de réseaux.");
+                                    }
+                                }
+
+                                const newNet = new window.brain.NeuralNetwork().fromJSON(jsonData);
+                                newNet.colorDisplay = individualColors[0 % individualColors.length];
+                                neuralNetworks[0] = newNet;
+
+                                statusMessageSpan.textContent = "Poids chargés avec succès pour l'Individu 0 !";
+                                statusMessageSpan.className = 'font-bold text-green-600';
+                                console.log("Poids chargés depuis fichier JSON pour l'individu 0:", neuralNetworks[0]);
+
+                                if (typeof initGame === 'function' && typeof draw === 'function') {
+                                    initGame(0);
+                                    // displayedIndividualIndex = 0;
+                                    draw();
+                                }
+                                uploadWeightsFile.value = '';
+
+                            } catch (error) {
+                                console.error("Erreur lors du chargement ou du parsing du JSON:", error);
+                                statusMessageSpan.textContent = `Erreur: ${error.message}`;
+                                statusMessageSpan.className = 'font-bold text-red-600';
+                            }
+                        };
+                        reader.onerror = () => {
+                            console.error("Erreur de lecture du fichier.");
+                            statusMessageSpan.textContent = "Erreur de lecture du fichier.";
+                            statusMessageSpan.className = 'font-bold text-red-600';
+                        };
+                        reader.readAsText(file);
+                    });
+                }
+
+                // Initialize lastSquarePosition only if squares[displayedIndividualIndex] is defined (after initGame)
+                if (squares && squares[displayedIndividualIndex]) {
                     lastSquarePosition = { x: squares[displayedIndividualIndex].x, y: squares[displayedIndividualIndex].y };
                 }
             };
@@ -257,7 +328,7 @@
         });
 
 function generateCirclesForGeneration(count) {
-    currentGenerationCircleData = []; // Clear previous generation's circle data
+    currentGenerationCircleData = [];
     for (let i = 0; i < count; i++) {
         currentGenerationCircleData.push({
             x: Math.random() * (GAME_WIDTH - CIRCLE_RADIUS * 2) + CIRCLE_RADIUS,
@@ -269,7 +340,6 @@ function generateCirclesForGeneration(count) {
 }
 
 function initGame(individualIndex) {
-    // Initialize square for the specific individual
     squares[individualIndex] = {
         x: GAME_WIDTH / 2 - SQUARE_SIZE / 2,
         y: GAME_HEIGHT / 2 - SQUARE_SIZE / 2,
@@ -277,14 +347,13 @@ function initGame(individualIndex) {
         dx: 0,
         dy: 0
     };
-    // Initialize lastSquarePositions for the individual
     lastSquarePositions[individualIndex] = { x: squares[individualIndex].x, y: squares[individualIndex].y };
 
     if (currentGenerationCircleData && currentGenerationCircleData.length > 0) {
         populationCircles[individualIndex] = JSON.parse(JSON.stringify(currentGenerationCircleData));
     } else {
         populationCircles[individualIndex] = [];
-        generateNewRandomCircles(INITIAL_CIRCLES, individualIndex); // generateNewRandomCircles must exist or be created
+        generateNewRandomCircles(INITIAL_CIRCLES, individualIndex);
     }
 
     currentWaveScores[individualIndex] = 0;
@@ -293,12 +362,9 @@ function initGame(individualIndex) {
     if (!Array.isArray(populationTrainingData[individualIndex])) {
          populationTrainingData[individualIndex] = [];
     } else {
-         populationTrainingData[individualIndex].length = 0; // Clear previous data
+         populationTrainingData[individualIndex].length = 0;
     }
 
-    // Only call draw if this is the individual being displayed
-    // This draw call is important for the very first draw when the page loads and initGame is called from DOMContentLoaded.
-    // For subsequent inits (per individual in a generation), draw will be handled by the main gameLoop.
     if (individualIndex === displayedIndividualIndex) {
         draw();
     }
@@ -312,26 +378,18 @@ function updateIndividualGameState(individualIndex) {
         return;
     }
 
-    // Incrémenter le compteur de pas depuis la dernière collecte
     if (typeof stepsSinceLastCollection !== 'undefined' && stepsSinceLastCollection.length > individualIndex) {
         stepsSinceLastCollection[individualIndex]++;
-    } else {
-        // Fallback ou erreur si stepsSinceLastCollection n'est pas défini, ce qui ne devrait pas arriver.
-        // console.warn("stepsSinceLastCollection n'est pas correctement initialisé.");
     }
 
-    // Apply movement (dx/dy are set by makeAIDecision for this individual)
     currentSquare.x += currentSquare.dx;
     currentSquare.y += currentSquare.dy;
 
-    // Wall collisions
-    // ... (code existant pour les collisions avec les murs) ...
     if (currentSquare.x < 0) currentSquare.x = 0;
     if (currentSquare.x + currentSquare.size > GAME_WIDTH) currentSquare.x = GAME_WIDTH - currentSquare.size;
     if (currentSquare.y < 0) currentSquare.y = 0;
     if (currentSquare.y + currentSquare.size > GAME_HEIGHT) currentSquare.y = GAME_HEIGHT - currentSquare.size;
 
-    // Circle collection
     let collectedAny = false;
     if (currentCircles) {
         for (let i = currentCircles.length - 1; i >= 0; i--) {
@@ -346,31 +404,21 @@ function updateIndividualGameState(individualIndex) {
                     currentWaveScores[individualIndex] += REWARD_COLLECT_CIRCLE;
                     currentCircles.splice(i, 1);
                     collectedAny = true;
-
-                    // Réinitialiser le compteur de pas depuis la dernière collecte
                     if (typeof stepsSinceLastCollection !== 'undefined' && stepsSinceLastCollection.length > individualIndex) {
                         stepsSinceLastCollection[individualIndex] = 0;
                     }
                 }
             }
         }
-    } else {
-        // console.warn(\`[updateIndividualGameState] Cercles non initialisés pour l'individu \${individualIndex}\`);
     }
 
     if (collectedAny) {
-        // ... (code existant pour générer de nouveaux cercles) ...
          const currentCircleCount = currentCircles ? currentCircles.length : 0;
          const circlesToGenerate = INITIAL_CIRCLES - currentCircleCount;
          generateNewRandomCircles(circlesToGenerate > 0 ? circlesToGenerate : (currentCircleCount === 0 ? INITIAL_CIRCLES : 1), individualIndex);
     }
-
-    // Update lastSquarePositions
-    // ... (code existant) ...
      if (lastSquarePositions) {
          lastSquarePositions[individualIndex] = { x: currentSquare.x, y: currentSquare.y };
-     } else {
-         // console.error("[updateIndividualGameState] lastSquarePositions array is not initialized.");
      }
 }
 
@@ -379,8 +427,6 @@ function generateNewRandomCircles(count, individualIndex) {
         return;
     }
     if (!populationCircles[individualIndex]) {
-        // This might happen if initGame wasn't called for this individual yet,
-        // though ideally it should be.
         populationCircles[individualIndex] = [];
     }
     for (let i = 0; i < count; i++) {
@@ -402,7 +448,7 @@ function draw() {
 
     if (showGhostIndividuals && Array.isArray(currentWaveScores) && currentWaveScores.length === POPULATION_SIZE) {
         let bestScoreInThisFrame = -Infinity;
-        let bestScoreIndexInThisFrame = -1; // Default si aucun score positif ou si currentWaveScores est vide/invalide
+        let bestScoreIndexInThisFrame = -1;
 
         for (let i = 0; i < POPULATION_SIZE; i++) {
             if (currentWaveScores[i] > bestScoreInThisFrame) {
@@ -411,9 +457,8 @@ function draw() {
             }
         }
 
-        // Si aucun individu n'a de score (ex: tous à 0 au début), on garde le focus actuel ou on se rabat sur 0
         if (bestScoreIndexInThisFrame === -1) {
-            bestScoreIndexInThisFrame = currentFocusedIndividual; // Garder le focus actuel
+            bestScoreIndexInThisFrame = currentFocusedIndividual;
         }
 
         if (bestScoreIndexInThisFrame === candidateForFocus) {
@@ -429,42 +474,34 @@ function draw() {
 
         activeIndividualIndex = currentFocusedIndividual;
 
-        // S'assurer que les cercles correspondent à l'individu en focus
         if (populationCircles && populationCircles[activeIndividualIndex]) {
              circlesForDisplay = populationCircles[activeIndividualIndex];
         } else if (populationCircles && populationCircles[displayedIndividualIndex]) {
-             // Fallback de sécurité si populationCircles[activeIndividualIndex] n'est pas prêt
              circlesForDisplay = populationCircles[displayedIndividualIndex];
-             activeIndividualIndex = displayedIndividualIndex; // Revenir à l'index global sûr
-             currentFocusedIndividual = displayedIndividualIndex; // Réinitialiser le focus aussi
+             activeIndividualIndex = displayedIndividualIndex;
+             currentFocusedIndividual = displayedIndividualIndex;
         } else {
              circlesForDisplay = [];
         }
 
     } else {
-        // Mode non-fantôme ou scores non disponibles
         activeIndividualIndex = displayedIndividualIndex;
         if (populationCircles && populationCircles[activeIndividualIndex]) {
             circlesForDisplay = populationCircles[activeIndividualIndex];
         } else {
             circlesForDisplay = [];
         }
-        // Réinitialiser l'état du focus quand on n'est pas en mode fantôme
-        currentFocusedIndividual = displayedIndividualIndex; // ou activeIndividualIndex ici
-        candidateForFocus = displayedIndividualIndex; // ou activeIndividualIndex ici
+        currentFocusedIndividual = displayedIndividualIndex;
+        candidateForFocus = displayedIndividualIndex;
         framesAsCandidate = 0;
     }
 
-    // --- Dessin des fantômes (si activé) ---
-    // La logique ici reste la même : elle utilise activeIndividualIndex (qui est maintenant currentFocusedIndividual en mode fantôme)
-    // pour déterminer qui ne PAS dessiner comme fantôme.
     if (showGhostIndividuals && Array.isArray(squares) && Array.isArray(neuralNetworks)) {
         for (let i = 0; i < POPULATION_SIZE; i++) {
             if (i === activeIndividualIndex) {
                 continue;
             }
             const ghostSquare = squares[i];
-            // ... (reste du code de dessin des fantômes) ...
             const ghostNetwork = neuralNetworks[i];
             if (ghostSquare && ghostNetwork && ghostNetwork.colorDisplay) {
                 let ghostColor = ghostNetwork.colorDisplay.replace(/, ?\d+(\.\d+)?\)/, ', 0.05)');
@@ -479,9 +516,6 @@ function draw() {
         }
     }
 
-    // --- Dessin de l'individu principal (activeIndividualIndex) ---
-    // Le reste de la fonction (dessin de activeIndividualIndex et circlesForDisplay) reste identique.
-    // ... (code existant pour dessiner currentSquareToDraw = squares[activeIndividualIndex] et circlesForDisplay) ...
      if (activeIndividualIndex < 0 || activeIndividualIndex >= POPULATION_SIZE || !squares[activeIndividualIndex]) {
         return;
     }
@@ -515,7 +549,7 @@ function draw() {
 }
 
 function gameLoop() {
-    draw(); // Only responsible for drawing the state of displayedIndividualIndex
+    draw();
     gameLoopId = requestAnimationFrame(gameLoop);
 }
 
@@ -524,7 +558,6 @@ function getNNInputs(individualIndex) {
     const currentCircles = populationCircles[individualIndex];
 
     if (!currentSquare) {
-        // console.warn(\`[getNNInputs] Carré non défini pour l'individu \${individualIndex}\`);
         return {
             squareX: 0.5, squareY: 0.5, closestCircleX: 0.5, closestCircleY: 0.5,
             distanceToClosestCircle: 1, distanceToLeftWall: 0.5, distanceToRightWall: 0.5,
@@ -541,8 +574,8 @@ function getNNInputs(individualIndex) {
         currentCircles.forEach(circle => {
             if (!circle.collected) {
                 const dist = Math.sqrt(
-                    Math.pow(currentSquare.x - circle.x, 2) + // Use currentSquare.x, not square.x
-                    Math.pow(currentSquare.y - circle.y, 2)  // Use currentSquare.y, not square.y
+                    Math.pow(currentSquare.x - circle.x, 2) +
+                    Math.pow(currentSquare.y - circle.y, 2)
                 );
                 if (dist < minDistance) {
                     minDistance = dist;
@@ -576,23 +609,17 @@ function getNNInputs(individualIndex) {
 }
 
 function makeAIDecision(individualIndex) {
-    // aiDecisionCounter is global and reset elsewhere before a generation evaluation starts
-    // For per-individual step counting if needed, a local var or array would be used.
-    // aiDecisionCounter++; // This global counter will now count total decisions across all individuals in a step.
-    // Let's assume aiDecisionCounter is for the whole generation step process.
-
     const currentIndNetwork = neuralNetworks[individualIndex];
     const currentIndSquare = squares[individualIndex];
 
     if (!currentIndNetwork || !currentIndSquare) {
-        // console.warn(\`[makeAIDecision] Réseau ou carré non défini pour l'individu \${individualIndex}\`);
         return;
     }
     if (typeof currentIndNetwork.run !== 'function') {
         return;
     }
 
-    const inputs = getNNInputs(individualIndex); // Uses individual's current state
+    const inputs = getNNInputs(individualIndex);
     const outputFromNN = currentIndNetwork.run(inputs);
 
     let chosenAction;
@@ -621,9 +648,6 @@ function makeAIDecision(individualIndex) {
         case 'right': currentIndSquare.dx = moveSpeed; break;
         case 'idle': break;
     }
-
-    // Reward is calculated based on the action taken from the current state (inputs)
-    // and the previous state (lastSquarePositions[individualIndex])
     const reward = calculateReward(chosenAction, inputs, individualIndex, currentIndSquare.dx, currentIndSquare.dy);
     currentWaveScores[individualIndex] += reward;
 
@@ -635,98 +659,73 @@ function makeAIDecision(individualIndex) {
          populationTrainingData[individualIndex] = [];
     }
     populationTrainingData[individualIndex].push({ input: inputs, output: outputForTraining });
-
-    // lastSquarePositions[individualIndex] is NOT updated here.
-    // It's updated in updateIndividualGameState AFTER the move is applied.
-    // This ensures calculateReward in the NEXT call to makeAIDecision for this individual
-    // uses the state *before* that next decision's move.
 }
 
 function calculateReward(action, inputs, individualIndex, moveDx, moveDy) {
     let reward = 0;
-    reward -= 0.001; // Small penalty per step to encourage efficiency (existant)
+    reward -= 0.001;
 
-    // Pénalité d'impatience si aucune collecte récente
     if (typeof stepsSinceLastCollection !== 'undefined' &&
         stepsSinceLastCollection.length > individualIndex &&
         stepsSinceLastCollection[individualIndex] > MAX_STEPS_WITHOUT_COLLECTION) {
-        reward += PENALTY_NO_COLLECTION_SOON; // PENALTY_NO_COLLECTION_SOON est une valeur négative
-        // console.log(\`Ind \${individualIndex}: Pénalité d'impatience! Steps: \${stepsSinceLastCollection[individualIndex]}, Reward +\${PENALTY_NO_COLLECTION_SOON}\`);
+        reward += PENALTY_NO_COLLECTION_SOON;
     }
 
-    const currentDistanceToCircle = inputs.distanceToClosestCircle; // Existant
-    const currentIndSquare = squares[individualIndex]; // Existant
-    const currentIndLastSquarePos = lastSquarePositions[individualIndex]; // Existant
+    const currentDistanceToCircle = inputs.distanceToClosestCircle;
+    const currentIndSquare = squares[individualIndex];
+    const currentIndLastSquarePos = lastSquarePositions[individualIndex];
 
-    // --- Début de la NOUVELLE LOGIQUE pour la récompense de direction ---
-    if (currentIndSquare && inputs.distanceToClosestCircle < 1 && (moveDx !== 0 || moveDy !== 0)) { // Si un cercle est visible et qu'il y a mouvement
+    if (currentIndSquare && inputs.distanceToClosestCircle < 1 && (moveDx !== 0 || moveDy !== 0)) {
         const closestCircleX_abs = inputs.closestCircleX * GAME_WIDTH;
         const closestCircleY_abs = inputs.closestCircleY * GAME_HEIGHT;
 
-        // Vecteur du carré vers le cercle
-        let vecToCircleX = closestCircleX_abs - (currentIndSquare.x + SQUARE_SIZE / 2); // Centre du carré
-        let vecToCircleY = closestCircleY_abs - (currentIndSquare.y + SQUARE_SIZE / 2); // Centre du carré
+        let vecToCircleX = closestCircleX_abs - (currentIndSquare.x + SQUARE_SIZE / 2);
+        let vecToCircleY = closestCircleY_abs - (currentIndSquare.y + SQUARE_SIZE / 2);
         const magVecToCircle = Math.sqrt(vecToCircleX * vecToCircleX + vecToCircleY * vecToCircleY);
 
-        if (magVecToCircle > 0) { // Normaliser le vecteur vers le cercle
+        if (magVecToCircle > 0) {
             vecToCircleX /= magVecToCircle;
             vecToCircleY /= magVecToCircle;
 
-            // Normaliser le vecteur de mouvement (moveDx, moveDy)
             const magMoveVec = Math.sqrt(moveDx * moveDx + moveDy * moveDy);
-            // moveDx et moveDy ne devraient pas être tous les deux 0 ici à cause de la condition externe,
-            // mais une vérification de magMoveVec > 0 est plus sûre si moveDx/moveDy pouvaient être très petits.
-            // Cependant, moveSpeed est 5, donc magMoveVec sera 5 ou Math.sqrt(50) si diagonal.
-
             const moveVecNormX = moveDx / magMoveVec;
             const moveVecNormY = moveDy / magMoveVec;
-
-            // Calculer le produit scalaire
             const dotProduct = (moveVecNormX * vecToCircleX) + (moveVecNormY * vecToCircleY);
 
-            const HEADING_THRESHOLD_POSITIVE = 0.5; // Seuil pour bonne direction
-            const HEADING_THRESHOLD_NEGATIVE = -0.7; // Seuil pour mauvaise direction (déjà défini)
+            const HEADING_THRESHOLD_POSITIVE = 0.5;
+            const HEADING_THRESHOLD_NEGATIVE = -0.7;
 
             if (dotProduct > HEADING_THRESHOLD_POSITIVE) {
                 reward += NEW_REWARD_DIRECT_HEADING;
-                // console.log(\`Ind \${individualIndex}: Bonne direction! Reward +\${NEW_REWARD_DIRECT_HEADING}\`);
             } else if (dotProduct < HEADING_THRESHOLD_NEGATIVE) {
-                reward -= NEW_PENALTY_WRONG_HEADING; // Soustraire la pénalité
-                // console.log(\`Ind \${individualIndex}: Mauvaise direction! Penalty -\${NEW_PENALTY_WRONG_HEADING}\`);
+                reward -= NEW_PENALTY_WRONG_HEADING;
             }
         }
     }
-    // --- Fin de la NOUVELLE LOGIQUE ---
 
-    // Logique de récompense existante (basée sur la distance)
-    if (currentIndLastSquarePos && currentIndSquare) { // S'assurer que ces objets existent
-         const closestCircleX_abs_for_dist_calc = inputs.closestCircleX * GAME_WIDTH; // Répété pour clarté, pourrait être optimisé
-         const closestCircleY_abs_for_dist_calc = inputs.closestCircleY * GAME_HEIGHT; // Répété pour clarté
+    if (currentIndLastSquarePos && currentIndSquare) {
+         const closestCircleX_abs_for_dist_calc = inputs.closestCircleX * GAME_WIDTH;
+         const closestCircleY_abs_for_dist_calc = inputs.closestCircleY * GAME_HEIGHT;
 
          const prevStepDistanceToCurrentCircle = Math.sqrt(
              Math.pow(currentIndLastSquarePos.x - closestCircleX_abs_for_dist_calc, 2) +
              Math.pow(currentIndLastSquarePos.y - closestCircleY_abs_for_dist_calc, 2)
-         ) / Math.sqrt(GAME_WIDTH * GAME_WIDTH + GAME_HEIGHT * GAME_HEIGHT); // Normalisation existante
+         ) / Math.sqrt(GAME_WIDTH * GAME_WIDTH + GAME_HEIGHT * GAME_HEIGHT);
 
          if (currentDistanceToCircle < prevStepDistanceToCurrentCircle) {
              reward += REWARD_MOVE_TOWARDS_CIRCLE;
          } else if (currentDistanceToCircle > prevStepDistanceToCurrentCircle && inputs.distanceToClosestCircle < 1) {
-             // Pénalité si on s'éloigne d'un cercle visible
-             reward -= REWARD_MOVE_TOWARDS_CIRCLE * 0.5; // Existant
+             reward -= REWARD_MOVE_TOWARDS_CIRCLE * 0.5;
          }
-    } else {
-        // console.warn(\`[calculateReward] currentIndLastSquarePos ou currentIndSquare non défini pour l'individu \${individualIndex}\`);
     }
 
 
-    if (action === 'idle') { // Existant
+    if (action === 'idle') {
         reward += PENALTY_IDLE;
     }
 
-    // Pénalité de collision avec le mur (existante)
     if (inputs.distanceToLeftWall <= 0.01 || inputs.distanceToRightWall <= 0.01 ||
         inputs.distanceToTopWall <= 0.01 || inputs.distanceToBottomWall <= 0.01) {
-        // ... (code de collision existant) ...
          if ((action === 'left' && inputs.distanceToLeftWall <= 0.01) ||
              (action === 'right' && inputs.distanceToRightWall <= 0.01) ||
              (action === 'up' && inputs.distanceToTopWall <= 0.01) ||
@@ -746,28 +745,22 @@ function runGenerationEvaluationStep() {
         return;
     }
 
-    // Perform one step of decision and game state update for all individuals
     for (let i = 0; i < POPULATION_SIZE; i++) {
-        makeAIDecision(i);          // AI decides action, updates its dx/dy, calculates reward, stores training data
-        updateIndividualGameState(i); // Game state updates based on action, handles collisions, circles, updates lastSquarePosition
+        makeAIDecision(i);
+        updateIndividualGameState(i);
     }
 
     currentStepInGeneration++;
 
-    // Update UI (e.g., score of the displayed individual might have changed)
-    // updateUI() is relatively light as it only updates DOM text content.
-    if (currentStepInGeneration % 20 === 0) { // Update UI less frequently to avoid too many DOM updates per step cycle
+    if (currentStepInGeneration % 20 === 0) {
         updateUI();
     }
 
-
     if (currentStepInGeneration < STEPS_PER_GENERATION_EVALUATION) {
-        // Continue to the next step of the current generation's evaluation
-        setTimeout(runGenerationEvaluationStep, 0); // Yield to browser
+        setTimeout(runGenerationEvaluationStep, 0);
     } else {
-        // All steps for the current generation's evaluation are done
-        updateUI(); // Final UI update for the generation before processing
-        processEndOfGenerationEvaluation(); // Proceed to train, select, crossover, mutate
+        updateUI();
+        processEndOfGenerationEvaluation();
     }
 }
 
@@ -807,7 +800,7 @@ function startTraining() {
     for (let i = 0; i < POPULATION_SIZE; i++) {
         populationTrainingData[i] = [];
     }
-    // lastSquarePositions will be initialized by initGame
+
     if(statusMessageSpan) {
         statusMessageSpan.textContent = `Initialisation Gén. ${currentGeneration}, Ind. ${displayedIndividualIndex + 1}/${POPULATION_SIZE}...`;
         statusMessageSpan.classList.remove('text-yellow-600', 'text-green-600', 'text-purple-600');
@@ -822,12 +815,11 @@ function startTraining() {
 
     currentStepInGeneration = 0;
 
-    epsilon = initialEpsilon; // Reset epsilon
+    epsilon = initialEpsilon;
     if(epsilonDisplay) epsilonDisplay.textContent = epsilon.toFixed(2);
 
     updateUI();
 
-    // Ensure the rendering loop is running
     if (typeof gameLoopId !== 'undefined' && gameLoopId !== null) {
         cancelAnimationFrame(gameLoopId);
     }
@@ -837,7 +829,7 @@ function startTraining() {
     runGenerationEvaluationStep();
 }
 
-function stopTraining() { // Called when user manually stops
+function stopTraining() {
     isTraining = false;
     if(startButton) {
         startButton.textContent = "Lancer l'entraînement";
@@ -850,12 +842,8 @@ function stopTraining() { // Called when user manually stops
         statusMessageSpan.classList.add('text-yellow-600');
     }
     console.log("[stopTraining] Entraînement arrêté manuellement par l'utilisateur.");
-    updateUI(); // Reflect score and generation state at stop
-    // gameLoopId is managed by startTraining/stopTraining. No need to cancel here if startTraining handles it.
-    // The runGenerationEvaluationStep loop will terminate because isTraining is false.
+    updateUI();
 }
-
-// Removed startNextWave() as it's obsolete.
 
 async function processEndOfGenerationEvaluation() {
     console.log(`[processEndOfGenEval] Fin évaluation Gén. ${currentGeneration}. Entraînement des réseaux...`);
@@ -926,7 +914,7 @@ async function processEndOfGenerationEvaluation() {
     } else if (childrenNeeded > 0) {
          console.warn("[processEndOfGenEval] Pas de réseaux valides pour la reproduction. Remplissage avec de nouveaux réseaux (non entraînés).");
          for (let i = 0; i < childrenNeeded; i++) {
-             const tempNet = new brain.NeuralNetwork({hiddenLayers: [16,16], activation: 'sigmoid'}); // MODIFIÉ
+             const tempNet = new brain.NeuralNetwork({hiddenLayers: [16,16], activation: 'sigmoid'});
              nextGenerationData.push({ json: tempNet.toJSON(), wasMutated: false });
          }
     }
@@ -938,7 +926,7 @@ async function processEndOfGenerationEvaluation() {
 
         if (!networkDataEntry || !networkDataEntry.json) {
             console.warn(`[processEndOfGenEval] Manque de JSON pour l'individu ${i}, création d'un nouveau réseau.`);
-            const tempNetForFill = new brain.NeuralNetwork({hiddenLayers: [16,16], activation: 'sigmoid'}); // MODIFIÉ
+            const tempNetForFill = new brain.NeuralNetwork({hiddenLayers: [16,16], activation: 'sigmoid'});
             netJSON = tempNetForFill.toJSON();
             networkDataEntry = { json: netJSON, wasMutated: false };
         } else {
@@ -962,7 +950,7 @@ async function processEndOfGenerationEvaluation() {
             newNeuralNetworks.push(net);
         } catch(e) {
             console.error(`Erreur fromJSON pour l'individu ${i}, utilisation d'un fallback.`, e, netJSON);
-            const fallbackNet = new window.brain.NeuralNetwork({hiddenLayers: [16,16], activation: 'sigmoid'}); // MODIFIÉ
+            const fallbackNet = new window.brain.NeuralNetwork({hiddenLayers: [16,16], activation: 'sigmoid'});
             fallbackNet.wasMutatedThisGeneration = false;
             fallbackNet.colorDisplay = individualColors[i % individualColors.length];
             newNeuralNetworks.push(fallbackNet);
@@ -1008,34 +996,31 @@ async function processEndOfGenerationEvaluation() {
     runGenerationEvaluationStep();
 }
 
-// Placeholder Genetic Algorithm functions
 function crossover(networkJSON1, networkJSON2) {
     if (!networkJSON1 || !networkJSON2) {
         console.error("Crossover: Un ou les deux parents sont non définis.");
         return networkJSON1 || networkJSON2 || null;
     }
 
-    let childJSON = JSON.parse(JSON.stringify(networkJSON1)); // Deep copy parent1
+    let childJSON = JSON.parse(JSON.stringify(networkJSON1));
 
-    for (let l = 1; l < childJSON.layers.length; l++) { // Start from layer 1
+    for (let l = 1; l < childJSON.layers.length; l++) {
         const layer1 = networkJSON1.layers[l];
         const layer2 = networkJSON2.layers[l];
         const childLayer = childJSON.layers[l];
 
         if (!layer1 || !layer2 || !childLayer) {
-            // console.warn(\`Crossover: Layer \${l} manquant ou incomplet chez un parent ou enfant.\`);
             continue;
         }
 
-        // Crossover biases
         if (childLayer.biases && layer1.biases && layer2.biases) {
-            if (Array.isArray(childLayer.biases)) { // Array of numbers
+            if (Array.isArray(childLayer.biases)) {
                 for (let i = 0; i < childLayer.biases.length; i++) {
                     if (layer1.biases[i] !== undefined && layer2.biases[i] !== undefined) {
                         childLayer.biases[i] = (layer1.biases[i] + layer2.biases[i]) / 2;
                     }
                 }
-            } else { // Object format: { '0': bias_val, ... }
+            } else {
                 for (const neuronIdx in childLayer.biases) {
                     if (layer1.biases.hasOwnProperty(neuronIdx) && layer2.biases.hasOwnProperty(neuronIdx)) {
                         childLayer.biases[neuronIdx] = (layer1.biases[neuronIdx] + layer2.biases[neuronIdx]) / 2;
@@ -1044,19 +1029,18 @@ function crossover(networkJSON1, networkJSON2) {
             }
         }
 
-        // Crossover weights
         if (childLayer.weights && layer1.weights && layer2.weights) {
-            if (Array.isArray(childLayer.weights)) { // Array of Arrays (e.g., RNNTimeStep)
-                 for (let i = 0; i < childLayer.weights.length; i++) { // Neuron index or input index
+            if (Array.isArray(childLayer.weights)) {
+                 for (let i = 0; i < childLayer.weights.length; i++) {
                     if (layer1.weights[i] && layer2.weights[i] && Array.isArray(childLayer.weights[i])) {
-                        for (let j = 0; j < childLayer.weights[i].length; j++) { // Weight index
+                        for (let j = 0; j < childLayer.weights[i].length; j++) {
                             if (layer1.weights[i][j] !== undefined && layer2.weights[i][j] !== undefined) {
                                 childLayer.weights[i][j] = (layer1.weights[i][j] + layer2.weights[i][j]) / 2;
                             }
                         }
                     }
                 }
-            } else { // Object of Arrays (e.g., NeuralNetwork)
+            } else {
                 for (const neuronIdx in childLayer.weights) {
                     if (layer1.weights.hasOwnProperty(neuronIdx) && layer2.weights.hasOwnProperty(neuronIdx) &&
                         Array.isArray(childLayer.weights[neuronIdx])) {
@@ -1079,63 +1063,55 @@ function crossover(networkJSON1, networkJSON2) {
 function mutate(networkJSON, rate, amount) {
     if (!networkJSON || !networkJSON.layers) {
         console.error("Mutate: networkJSON non défini ou sans couches.");
-        return { mutatedJson: networkJSON, didMutate: false }; // Retourner l'objet avec statut
+        return { mutatedJson: networkJSON, didMutate: false };
     }
 
-    let actualMutationOccurred = false; // Initialiser l'indicateur
+    let actualMutationOccurred = false;
 
-    // Copie profonde du JSON pour éviter de modifier l'original si aucune mutation n'a lieu
-    // ou pour s'assurer que les modifications sont sur une nouvelle copie.
-    // Cependant, la structure actuelle modifie networkJSON en place.
-    // Pour rester cohérent avec le retour {mutatedJson: networkJSON, ...},
-    // il est implicite que networkJSON est l'objet qui a été modifié.
-
-    for (let l = 1; l < networkJSON.layers.length; l++) { // Start from layer 1
+    for (let l = 1; l < networkJSON.layers.length; l++) {
         const layer = networkJSON.layers[l];
         if (!layer) continue;
 
-        // Mutate biases
         if (layer.biases) {
             if (Array.isArray(layer.biases)) {
                 for (let i = 0; i < layer.biases.length; i++) {
                     if (Math.random() < rate) {
                         layer.biases[i] += (Math.random() * 2 - 1) * amount;
-                        actualMutationOccurred = true; // Mutation effectuée
+                        actualMutationOccurred = true;
                     }
                 }
-            } else { // Object format
+            } else {
                 for (const neuronIdx in layer.biases) {
                     if (layer.biases.hasOwnProperty(neuronIdx)) {
                         if (Math.random() < rate) {
                             layer.biases[neuronIdx] += (Math.random() * 2 - 1) * amount;
-                            actualMutationOccurred = true; // Mutation effectuée
+                            actualMutationOccurred = true;
                         }
                     }
                 }
             }
         }
 
-        // Mutate weights
         if (layer.weights) {
-            if (Array.isArray(layer.weights)) { // Array of Arrays
+            if (Array.isArray(layer.weights)) {
                 for (let i = 0; i < layer.weights.length; i++) {
                     if (layer.weights[i] && Array.isArray(layer.weights[i])) {
                         for (let j = 0; j < layer.weights[i].length; j++) {
                             if (Math.random() < rate) {
                                 layer.weights[i][j] += (Math.random() * 2 - 1) * amount;
-                                actualMutationOccurred = true; // Mutation effectuée
+                                actualMutationOccurred = true;
                             }
                         }
                     }
                 }
-            } else { // Object of Arrays
+            } else {
                 for (const neuronIdx in layer.weights) {
                     if (layer.weights.hasOwnProperty(neuronIdx) && Array.isArray(layer.weights[neuronIdx])) {
                         const weightsNeuron = layer.weights[neuronIdx];
                         for (let j = 0; j < weightsNeuron.length; j++) {
                             if (Math.random() < rate) {
                                 weightsNeuron[j] += (Math.random() * 2 - 1) * amount;
-                                actualMutationOccurred = true; // Mutation effectuée
+                                actualMutationOccurred = true;
                             }
                         }
                     }
@@ -1143,7 +1119,7 @@ function mutate(networkJSON, rate, amount) {
             }
         }
     }
-    return { mutatedJson: networkJSON, didMutate: actualMutationOccurred }; // Retourner l'objet
+    return { mutatedJson: networkJSON, didMutate: actualMutationOccurred };
 }
 
 function endTrainingSession() {
@@ -1158,13 +1134,11 @@ function endTrainingSession() {
         startButton.classList.remove('bg-red-600', 'hover:bg-red-700');
         startButton.classList.add('bg-green-600', 'hover:bg-green-700');
     }
-    // currentGeneration was incremented *before* this call if MAX_WAVES was reached.
     console.log(`[endTrainingSession] Entraînement complet terminé après ${currentGeneration - 1} générations.`);
 
-    // Sauvegarde du meilleur individu (l'élite à l'index 0 de la population actuelle)
     if (neuralNetworks && neuralNetworks.length > 0 && neuralNetworks[0]) {
-        const bestNetwork = neuralNetworks[0]; // The champion of the last evaluated generation is at index 0
-        const bestScore = individualScores[0]; // Corresponds to the score of the network that ended up at index 0 after sorting
+        const bestNetwork = neuralNetworks[0];
+        const bestScore = individualScores[0];
 
         console.log(`[endTrainingSession] Meilleur individu (élite actuelle): Index 0, Score approx.: ${bestScore ? bestScore.toFixed(2) : 'N/A'}`);
         try {
@@ -1190,10 +1164,8 @@ function endTrainingSession() {
 }
 
 function updateUI() {
-    // Ensure displayedIndividualIndex is valid before accessing arrays
     const displayIdx = (displayedIndividualIndex >= 0 && displayedIndividualIndex < POPULATION_SIZE) ? displayedIndividualIndex : 0;
 
-    // currentScoreSpan now reflects the score of the displayed individual for the current wave
     if (currentWaveScores && currentWaveScores.length > displayIdx) {
         currentScoreSpan.textContent = currentWaveScores[displayIdx].toFixed(0);
     } else {
@@ -1203,9 +1175,6 @@ function updateUI() {
     waveNumberSpan.textContent = currentGeneration;
     epsilonDisplay.textContent = epsilon.toFixed(2);
 
-    // The old currentIndividualDisplaySpan logic is removed.
-
-    // Add the new status message logic:
     if (isTraining && currentStepInGeneration > 0 && currentStepInGeneration <= STEPS_PER_GENERATION_EVALUATION) {
         statusMessageSpan.textContent = `Gén. ${currentGeneration}, Ind. ${displayIdx + 1}/${POPULATION_SIZE}, Étape ${currentStepInGeneration}/${STEPS_PER_GENERATION_EVALUATION}`;
     }
@@ -1219,8 +1188,8 @@ function savePopulation() {
                 return net.toJSON();
             }
             console.warn("[savePopulation] Un réseau dans la population n'a pas pu être converti en JSON ou est indéfini.");
-            return null; // ou une structure JSON par défaut/vide
-        }).filter(json => json !== null); // Filtrer les nuls potentiels
+            return null;
+        }).filter(json => json !== null);
 
         if (populationJson.length > 0) {
             localStorage.setItem('populationNeuralNetworkWeights_v1', JSON.stringify(populationJson));
@@ -1240,11 +1209,11 @@ async function loadNeuralNetwork() {
             const populationJson = JSON.parse(savedPopulationWeights);
             if (!window.brain || !window.brain.NeuralNetwork) {
                 console.error("Brain.js n'est pas disponible pour charger les réseaux.");
-                await createNewNeuralNetwork(); // Attempt to create new ones
+                await createNewNeuralNetwork();
                 return;
             }
             if (Array.isArray(populationJson) && populationJson.length === POPULATION_SIZE) {
-                neuralNetworks = []; // Clear existing
+                neuralNetworks = [];
                 for (let i = 0; i < POPULATION_SIZE; i++) {
                     const net = new window.brain.NeuralNetwork().fromJSON(populationJson[i]);
                     net.colorDisplay = individualColors[i % individualColors.length];
@@ -1260,7 +1229,6 @@ async function loadNeuralNetwork() {
             console.error("Erreur lors du chargement des poids de la population:", error);
         }
     }
-    // If loading failed or no saved data:
     await createNewNeuralNetwork();
 }
 
@@ -1271,12 +1239,12 @@ async function createNewNeuralNetwork() {
         if(startButton) startButton.disabled = true;
         return;
     }
-    neuralNetworks = []; // Clear any existing networks
+    neuralNetworks = [];
     let allInitialized = true;
     console.log(`[createNewNeuralNetwork] Initialisation de ${POPULATION_SIZE} nouveaux réseaux.`);
     for (let i = 0; i < POPULATION_SIZE; i++) {
         const net = new window.brain.NeuralNetwork({
-            hiddenLayers: [16, 16], // MODIFIÉ ICI
+            hiddenLayers: [16, 16],
             activation: 'sigmoid',
         });
 
@@ -1288,10 +1256,10 @@ async function createNewNeuralNetwork() {
             };
             const dummyOutput = { idle: 0, up: 0, down: 0, left: 0, right: 0 };
             OUTPUT_ACTIONS.forEach(action => dummyOutput[action] = 0);
-            dummyOutput["idle"] = 1; // Corrected: set a default action, e.g. idle
+            dummyOutput["idle"] = 1;
 
             await net.train([{ input: dummyInput, output: dummyOutput }], {
-                iterations: 1, errorThresh: 0.9, log: false, learningRate: 0.01, timeout: 100 // Short timeout for dummy
+                iterations: 1, errorThresh: 0.9, log: false, learningRate: 0.01, timeout: 100
             });
             net.colorDisplay = individualColors[i % individualColors.length];
             neuralNetworks.push(net);
@@ -1318,3 +1286,5 @@ async function createNewNeuralNetwork() {
     </script>
 </body>
 </html>
+
+[end of neural_trainer.html]
