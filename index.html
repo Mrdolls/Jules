@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Game</title>
+    <style>
+        canvas {
+            border: 1px solid black;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    <script>
+        // Placeholder for other game settings and functions
+
+        // Rewards and penalties (now using let)
+        let REWARD_COLLECT_CIRCLE = 2;
+        let PENALTY_IDLE = -0.05; // MODIFIER ICI à -0.05
+        let PENALTY_WRONG_INPUT = -0.1;
+        let REWARD_CLOSE_TO_TARGET = 0.1;
+        let PENALTY_AWAY_FROM_TARGET = -0.1;
+
+
+        const defaultSettings = {
+            NUM_INDIVIDUALS: 10,
+            NUM_INPUTS: 4, // x, y, targetX, targetY
+            NUM_OUTPUTS: 5, // no-op, move E, N, W, S
+            MUTATION_RATE: 0.1,
+            MUTATION_AMOUNT: 0.5,
+            GENERATIONS: 100,
+            STEPS_PER_GENERATION: 200,
+            PENALTY_IDLE: -0.05, // MODIFIER ICI à -0.05
+            REWARD_COLLECT_CIRCLE: 2,
+            PENALTY_WRONG_INPUT: -0.1,
+            REWARD_CLOSE_TO_TARGET: 0.1,
+            PENALTY_AWAY_FROM_TARGET: -0.1,
+            // ... other parameters
+        };
+
+        function calculateReward(action, inputs, individualIndex, moveDx, moveDy) {
+            const HEADING_THRESHOLD_POSITIVE = 0.3;
+            const HEADING_THRESHOLD_NEGATIVE = -0.5;
+            let reward = 0;
+            // Example: Reward for moving towards a target (conceptual)
+            // This is a simplified reward, actual implementation would be more complex
+            if (action === 1 && moveDx > 0) { // Move East
+                // reward += REWARD_CLOSE_TO_TARGET;
+            }
+            // ... other reward logic ...
+
+            // Example: Penalty for being idle (no-op)
+            if (action === 0) { // NO_OP
+                reward += PENALTY_IDLE;
+            }
+
+            // --- AJOUTER LE CODE SUIVANT ---
+            const SURVIVAL_REWARD = 0.005;
+            let isMajorPenaltyApplied = false;
+
+            // Vérifier si une pénalité de collision murale a été appliquée
+            // Based on action mapping: 1:East(right), 2:North(up), 3:West(left), 4:South(down)
+            if ( (inputs.distanceToLeftWall <= 0.01 && action === 3) || // action was 'left'
+                 (inputs.distanceToRightWall <= 0.01 && action === 1) || // action was 'right'
+                 (inputs.distanceToTopWall <= 0.01 && action === 2) ||   // action was 'up'
+                 (inputs.distanceToBottomWall <= 0.01 && action === 4) ) { // action was 'down'
+                isMajorPenaltyApplied = true;
+            }
+
+            // Vérifier si la pénalité de non-collecte a été appliquée
+            // Assuming stepsSinceLastCollection and MAX_STEPS_WITHOUT_COLLECTION are accessible
+            if (typeof stepsSinceLastCollection !== 'undefined' &&
+                typeof MAX_STEPS_WITHOUT_COLLECTION !== 'undefined' && // Added check for MAX_STEPS_WITHOUT_COLLECTION
+                stepsSinceLastCollection.length > individualIndex &&
+                stepsSinceLastCollection[individualIndex] > MAX_STEPS_WITHOUT_COLLECTION) {
+                isMajorPenaltyApplied = true;
+            }
+
+            if (!isMajorPenaltyApplied) {
+                reward += SURVIVAL_REWARD;
+            }
+            // --- FIN DE L'AJOUT ---
+            return reward;
+        }
+
+        // Placeholder for other game logic like init, update, draw etc.
+        function init() {
+            console.log("Game initialized with settings:", defaultSettings);
+        }
+
+        init();
+    </script>
+</body>
+</html>
